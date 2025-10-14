@@ -1,0 +1,146 @@
+[
+  {
+    "id": "log_1753896822966_bl3y6qy86",
+    "timestamp": "2025-07-30T17:33:42.966Z",
+    "level": "INFO",
+    "action": "Modification utilisateur",
+    "userId": 3,
+    "userName": "Jane Smith",
+    "details": "Utilisateur modifié: Jane Smith (jane@smt.com). Changements: Rôle: utilisateur → admin",
+    "status": "SUCCESS"
+  },
+  {
+    "id": "log_1753897298943_0xjptm6fl",
+    "timestamp": "2025-07-30T17:41:38.943Z",
+    "level": "INFO",
+    "action": "Modification utilisateur",
+    "userId": 2,
+    "userName": "John Doe",
+    "details": "Utilisateur modifié: John Doe (user@smt.com). Changements: Rôle: utilisateur → admin",
+    "status": "SUCCESS"
+  },
+  {
+    "id": "log_1753897310769_wvejr5k2v",
+    "timestamp": "2025-07-30T17:41:50.769Z",
+    "level": "INFO",
+    "action": "Modification utilisateur",
+    "userId": 4,
+    "userName": "Bob Wilson",
+    "details": "Utilisateur modifié: Bob Wilson (bob@smt.com). Changements: Nom: Bob Wilson → Bob Wilsons",
+    "status": "SUCCESS"
+  },
+  {
+    "id": "log_1753897557308_tdm321nif",
+    "timestamp": "2025-07-30T17:45:57.308Z",
+    "level": "INFO",
+    "action": "Modification utilisateur",
+    "userId": 4,
+    "userName": "Bob Wilson",
+    "details": "Utilisateur modifié: Bob Wilson (bob@smt.com). Changements: Rôle: utilisateur → admin",
+    "status": "SUCCESS"
+  },
+  {
+    "id": "log_1753897570571_phg1q018l",
+    "timestamp": "2025-07-30T17:46:10.571Z",
+    "level": "INFO",
+    "action": "Modification utilisateur",
+    "userId": 4,
+    "userName": "Bob Wilson",
+    "details": "Utilisateur modifié: Bob Wilson (bob@smt.com). Changements: Rôle: utilisateur → admin",
+    "status": "SUCCESS"
+  },
+  {
+    "id": "log_1753898309931_l5fwyee5l",
+    "timestamp": "2025-07-30T17:58:29.931Z",
+    "level": "INFO",
+    "action": "Modification utilisateur",
+    "userId": 2,
+    "userName": "John Doe",
+    "details": "Utilisateur modifié: John Doe (user@smt.com). Changements: Rôle: utilisateur → admin",
+    "status": "SUCCESS"
+  },
+  {
+    "id": "log_1753900681980_9lfx4txkl",
+    "timestamp": "2025-07-30T18:38:01.980Z",
+    "level": "INFO",
+    "action": "Accord d'accès",
+    "userId": 1,
+    "userName": "Admin User",
+    "details": "Accès accordé: Admin User → Google Drive",
+    "status": "SUCCESS",
+    "metadata": {
+      "appId": 2,
+      "appName": "Google Drive"
+    }
+  },
+  {
+    "id": "log_1753900682252_ad8wyb2ko",
+    "timestamp": "2025-07-30T18:38:02.252Z",
+    "level": "INFO",
+    "action": "Révocation d'accès",
+    "userId": 1,
+    "userName": "Admin User",
+    "details": "Accès révoqué: Admin User → Google Drive",
+    "status": "SUCCESS",
+    "metadata": {
+      "appId": 2,
+      "appName": "Google Drive"
+    }
+  },
+  {
+    "id": "log_1753900686672_qqyo4pkdq",
+    "timestamp": "2025-07-30T18:38:06.672Z",
+    "level": "INFO",
+    "action": "Accord d'accès",
+    "userId": 1,
+    "userName": "Admin User",
+    "details": "Accès accordé: Admin User → Gmail",
+    "status": "SUCCESS",
+    "metadata": {
+      "appId": 1,
+      "appName": "Gmail"
+    }
+  },
+  {
+    "id": "log_1753900687656_zc90p0c05",
+    "timestamp": "2025-07-30T18:38:07.656Z",
+    "level": "INFO",
+    "action": "Accord d'accès",
+    "userId": 1,
+    "userName": "Admin User",
+    "details": "Accès accordé: Admin User → Slack",
+    "status": "SUCCESS",
+    "metadata": {
+      "appId": 4,
+      "appName": "Slack"
+    }
+  },
+  {
+    "id": "log_1753900688941_zd52c1bbq",
+    "timestamp": "2025-07-30T18:38:08.941Z",
+    "level": "INFO",
+    "action": "Accord d'accès",
+    "userId": 1,
+    "userName": "Admin User",
+    "details": "Accès accordé: Admin User → Google Drive",
+    "status": "SUCCESS",
+    "metadata": {
+      "appId": 2,
+      "appName": "Google Drive"
+    }
+  },
+  {
+    "id": "log_1753900690163_y9ttifrr3",
+    "timestamp": "2025-07-30T18:38:10.163Z",
+    "level": "INFO",
+    "action": "Accord d'accès",
+    "userId": 1,
+    "userName": "Admin User",
+    "details": "Accès accordé: Admin User → Microsoft Teams",
+    "status": "SUCCESS",
+    "metadata": {
+      "appId": 3,
+      "appName": "Microsoft Teams"
+    }
+  }
+]

@@ -1,0 +1,83 @@
+{
+  "templates": [
+    {
+      "id": "welcome",
+      "name": "Email de bienvenue",
+      "subject": "🎉 Bienvenue sur {{companyName}} - Votre compte est activé",
+      "html": "\n    <div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;\">\n      <div style=\"background: linear-gradient(135deg, {{primaryColor}} 0%, {{secondaryColor}} 100%); padding: 30px; text-align: center;\">\n        <h1 style=\"color: white; margin: 0; font-size: 32px;\">{{companyName}}</h1>\n        <p style=\"color: #e0f2fe; margin: 10px 0 0 0; font-size: 18px;\">Bienvenue dans votre portail d'applications</p>\n      </div>\n      \n      <div style=\"padding: 30px; background: #f8fafc;\">\n        <h2 style=\"color: {{primaryColor}}; margin-top: 0;\">Bonjour {{userName}} ! 👋</h2>\n        <p style=\"color: #475569; line-height: 1.6; font-size: 16px;\">\n          Nous sommes ravis de vous accueillir sur <strong>{{companyName}}</strong>, votre portail centralisé \n          pour accéder à toutes vos applications professionnelles.\n        </p>\n        \n        <div style=\"background: white; padding: 25px; border-radius: 12px; margin: 25px 0; border-left: 4px solid {{secondaryColor}}; box-shadow: 0 2px 4px rgba(0,0,0,0.1);\">\n          <h3 style=\"color: {{primaryColor}}; margin-top: 0; font-size: 18px;\">🚀 Votre compte est prêt !</h3>\n          <p style=\"color: #475569; margin: 15px 0;\">\n            <strong>Email :</strong> {{userEmail}}<br>\n            <strong>Statut :</strong> Compte activé\n          </p>\n          <p style=\"color: #475569; line-height: 1.6;\">\n            Vous pouvez maintenant vous connecter et découvrir toutes les applications \n            auxquelles vous avez accès.\n          </p>\n        </div>\n        \n        <div style=\"background: #eff6ff; padding: 20px; border-radius: 8px; margin: 25px 0; border: 1px solid #bfdbfe;\">\n          <h4 style=\"color: {{primaryColor}}; margin-top: 0;\">📋 Prochaines étapes :</h4>\n          <ul style=\"color: #475569; margin: 0; padding-left: 20px;\">\n            <li style=\"margin: 8px 0;\">Connectez-vous à votre portail {{companyName}}</li>\n            <li style=\"margin: 8px 0;\">Explorez les applications disponibles</li>\n            <li style=\"margin: 8px 0;\">Personnalisez votre profil si nécessaire</li>\n            <li style=\"margin: 8px 0;\">Contactez votre administrateur pour toute question</li>\n          </ul>\n        </div>\n        \n        <div style=\"text-align: center; margin: 30px 0;\">\n          <a href=\"{{websiteUrl}}\" style=\"background: {{secondaryColor}}; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;\">\n            Accéder au portail\n          </a>\n        </div>\n        \n        <p style=\"color: #64748b; font-size: 14px; line-height: 1.5; margin-top: 30px;\">\n          Si vous avez des questions ou besoin d'aide, n'hésitez pas à contacter votre équipe support à {{supportEmail}}.\n        </p>\n      </div>\n      \n      <div style=\"padding: 20px; text-align: center; background: #1e293b; color: #94a3b8;\">\n        <p style=\"margin: 0; font-size: 14px;\">\n          {{companyName}} - Portail d'applications centralisé<br>\n          <em>Ce message a été généré automatiquement.</em>\n        </p>\n      </div>\n    </div>\n    ",
+      "text": "\n{{companyName}} - Bienvenue !\n\nBonjour {{userName}} !\n\nNous sommes ravis de vous accueillir sur {{companyName}}, votre portail centralisé pour accéder à toutes vos applications professionnelles.\n\nVotre compte est prêt !\n- Email : {{userEmail}}\n- Statut : Compte activé\n\nVous pouvez maintenant vous connecter et découvrir toutes les applications auxquelles vous avez accès.\n\nProchaines étapes :\n- Connectez-vous à votre portail {{companyName}}\n- Explorez les applications disponibles\n- Personnalisez votre profil si nécessaire\n- Contactez votre administrateur pour toute question\n\nSi vous avez des questions ou besoin d'aide, n'hésitez pas à contacter votre équipe support à {{supportEmail}}.\n\n{{companyName}} - Portail d'applications centralisé\nCe message a été généré automatiquement.\n    ",
+      "variables": [
+        "userName",
+        "userEmail",
+        "companyName",
+        "supportEmail",
+        "websiteUrl",
+        "primaryColor",
+        "secondaryColor"
+      ],
+      "description": "Email envoyé lors de la création d'un nouveau compte utilisateur",
+      "category": "welcome"
+    },
+    {
+      "id": "profile-update",
+      "name": "Notification de mise à jour de profil",
+      "subject": "🔄 {{companyName}} - Votre profil a été mis à jour",
+      "html": "\n    <div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;\">\n      <div style=\"background: linear-gradient(135deg, {{primaryColor}} 0%, {{secondaryColor}} 100%); padding: 30px; text-align: center;\">\n        <h1 style=\"color: white; margin: 0; font-size: 28px;\">{{companyName}}</h1>\n        <p style=\"color: #e0f2fe; margin: 10px 0 0 0;\">Notification de mise à jour de profil</p>\n      </div>\n      \n      <div style=\"padding: 30px; background: #f8fafc;\">\n        <h2 style=\"color: {{primaryColor}}; margin-top: 0;\">Bonjour {{userName}},</h2>\n        <p style=\"color: #475569; line-height: 1.6;\">\n          Votre profil {{companyName}} a été mis à jour avec succès.\n        </p>\n        \n        <div style=\"background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #10b981;\">\n          <h3 style=\"color: #059669; margin-top: 0;\">✅ Modifications effectuées :</h3>\n          <ul style=\"color: #475569; margin: 10px 0; padding-left: 20px;\">\n            {{changesList}}\n          </ul>\n        </div>\n        \n        <div style=\"background: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #f59e0b;\">\n          <p style=\"color: #92400e; margin: 0; font-size: 14px;\">\n            <strong>🔒 Sécurité :</strong> Si vous n'êtes pas à l'origine de ces modifications, \n            contactez immédiatement votre administrateur à {{supportEmail}}.\n          </p>\n        </div>\n        \n        <p style=\"color: #64748b; font-size: 14px; margin-top: 20px;\">\n          Date de modification : {{modificationDate}}\n        </p>\n      </div>\n      \n      <div style=\"padding: 20px; text-align: center; background: #1e293b; color: #94a3b8;\">\n        <p style=\"margin: 0; font-size: 14px;\">\n          {{companyName}} - Portail d'applications centralisé<br>\n          <em>Ce message a été généré automatiquement.</em>\n        </p>\n      </div>\n    </div>\n    ",
+      "text": "\n{{companyName}} - Notification de mise à jour de profil\n\nBonjour {{userName}},\n\nVotre profil {{companyName}} a été mis à jour avec succès.\n\nModifications effectuées :\n{{changesText}}\n\n🔒 Sécurité : Si vous n'êtes pas à l'origine de ces modifications, contactez immédiatement votre administrateur à {{supportEmail}}.\n\nDate de modification : {{modificationDate}}\n\n{{companyName}} - Portail d'applications centralisé\nCe message a été généré automatiquement.\n    ",
+      "variables": [
+        "userName",
+        "companyName",
+        "changesList",
+        "changesText",
+        "supportEmail",
+        "modificationDate"
+      ],
+      "description": "Email envoyé lors de la modification du profil utilisateur",
+      "category": "profile"
+    },
+    {
+      "id": "access-granted",
+      "name": "Nouvel accès accordé",
+      "subject": "🎉 Nouvel accès accordé - {{appName}} | {{companyName}}",
+      "html": "\n    <div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;\">\n      <div style=\"background: linear-gradient(135deg, {{primaryColor}} 0%, {{secondaryColor}} 100%); padding: 30px; text-align: center;\">\n        <h1 style=\"color: white; margin: 0; font-size: 28px;\">{{companyName}}</h1>\n        <p style=\"color: #e0f2fe; margin: 10px 0 0 0;\">Notification de modification d'accès</p>\n      </div>\n\n      <div style=\"padding: 30px; background: #f8fafc;\">\n        <h2 style=\"color: {{primaryColor}}; margin-top: 0;\">🎉 Nouvel accès accordé</h2>\n        <p style=\"color: #475569; line-height: 1.6; font-size: 16px;\">\n          Bonjour <strong>{{userName}}</strong>,\n        </p>\n        <p style=\"color: #475569; line-height: 1.6;\">\n          Vous avez maintenant accès à l'application <strong>{{appName}}</strong> avec le niveau <strong>{{accessLevel}}</strong>.\n        </p>\n\n        <div style=\"background: white; padding: 25px; border-radius: 12px; margin: 25px 0; border-left: 4px solid {{secondaryColor}}; box-shadow: 0 2px 4px rgba(0,0,0,0.1);\">\n          <h3 style=\"color: {{primaryColor}}; margin-top: 0; font-size: 18px;\">📱 Détails de l'application</h3>\n          <div style=\"color: #475569; margin: 15px 0;\">\n                         <strong>Application :</strong> {{appName}}<br>\n             <strong>Niveau d'accès :</strong> {{accessLevelDescription}}<br>\n             <strong>Accordé par :</strong> {{adminName}}<br>\n             <strong>Date :</strong> {{accessDate}}\n          </div>\n        </div>\n\n        <div style=\"background: #f0fdf4; padding: 20px; border-radius: 8px; margin: 25px 0; border: 1px solid #bbf7d0;\">\n          <h4 style=\"color: #166534; margin-top: 0;\">🚀 Prochaines étapes :</h4>\n          <ul style=\"color: #166534; margin: 0; padding-left: 20px;\">\n            <li style=\"margin: 8px 0;\">Connectez-vous à votre portail {{companyName}}</li>\n            <li style=\"margin: 8px 0;\">L'application {{appName}} est maintenant disponible</li>\n            <li style=\"margin: 8px 0;\">Explorez les fonctionnalités selon votre niveau d'accès</li>\n          </ul>\n        </div>\n\n        <p style=\"color: #64748b; font-size: 14px; line-height: 1.5; margin-top: 30px;\">\n          Si vous avez des questions concernant cette modification, n'hésitez pas à contacter votre équipe support à {{supportEmail}}.\n        </p>\n      </div>\n\n      <div style=\"padding: 20px; text-align: center; background: #1e293b; color: #94a3b8;\">\n        <p style=\"margin: 0; font-size: 14px;\">\n          {{companyName}} - Portail d'applications centralisé<br>\n          <em>Ce message a été généré automatiquement.</em>\n        </p>\n      </div>\n    </div>\n    ",
+      "text": "\n{{companyName}} - Nouvel accès accordé\n\nBonjour {{userName}},\n\nVous avez maintenant accès à l'application {{appName}} avec le niveau {{accessLevel}}.\n\nDétails de l'application :\n- Application : {{appName}}\n- Niveau d'accès : {{accessLevelDescription}}\n- Accordé par : {{adminName}}\n- Date : {{accessDate}}\n\nProchaines étapes :\n- Connectez-vous à votre portail {{companyName}}\n- L'application {{appName}} est maintenant disponible\n- Explorez les fonctionnalités selon votre niveau d'accès\n\nSi vous avez des questions concernant cette modification, n'hésitez pas à contacter votre équipe support à {{supportEmail}}.\n\n{{companyName}} - Portail d'applications centralisé\nCe message a été généré automatiquement.\n    ",
+      "variables": [
+        "userName",
+        "appName",
+        "accessLevel",
+        "accessLevelDescription",
+        "adminName",
+        "accessDate",
+        "companyName",
+        "supportEmail"
+      ],
+      "description": "Email envoyé lors de l'attribution d'un nouvel accès",
+      "category": "access"
+    },
+    {
+      "id": "access-revoked",
+      "name": "Accès retiré",
+      "subject": "🔒 Accès retiré - {{appName}} | {{companyName}}",
+      "html": "\n    <div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;\">\n      <div style=\"background: linear-gradient(135deg, {{primaryColor}} 0%, {{secondaryColor}} 100%); padding: 30px; text-align: center;\">\n        <h1 style=\"color: white; margin: 0; font-size: 28px;\">{{companyName}}</h1>\n        <p style=\"color: #e0f2fe; margin: 10px 0 0 0;\">Notification de modification d'accès</p>\n      </div>\n\n      <div style=\"padding: 30px; background: #f8fafc;\">\n        <h2 style=\"color: {{primaryColor}}; margin-top: 0;\">🔒 Accès retiré</h2>\n        <p style=\"color: #475569; line-height: 1.6; font-size: 16px;\">\n          Bonjour <strong>{{userName}}</strong>,\n        </p>\n        <p style=\"color: #475569; line-height: 1.6;\">\n          Votre accès à l'application <strong>{{appName}}</strong> a été retiré.\n        </p>\n\n        <div style=\"background: white; padding: 25px; border-radius: 12px; margin: 25px 0; border-left: 4px solid #ef4444; box-shadow: 0 2px 4px rgba(0,0,0,0.1);\">\n          <h3 style=\"color: #dc2626; margin-top: 0; font-size: 18px;\">📱 Détails de l'application</h3>\n          <div style=\"color: #475569; margin: 15px 0;\">\n                         <strong>Application :</strong> {{appName}}<br>\n             <strong>Retiré par :</strong> {{adminName}}<br>\n             <strong>Date :</strong> {{accessDate}}\n          </div>\n        </div>\n\n        <div style=\"background: #fef2f2; padding: 20px; border-radius: 8px; margin: 25px 0; border: 1px solid #fecaca;\">\n          <p style=\"color: #dc2626; margin: 0; font-size: 14px;\">\n            <strong>⚠️ Important :</strong> Vous ne pourrez plus accéder à cette application.\n            Si vous pensez qu'il s'agit d'une erreur, contactez votre administrateur à {{supportEmail}}.\n          </p>\n        </div>\n\n        <p style=\"color: #64748b; font-size: 14px; line-height: 1.5; margin-top: 30px;\">\n          Si vous avez des questions concernant cette modification, n'hésitez pas à contacter votre équipe support à {{supportEmail}}.\n        </p>\n      </div>\n\n      <div style=\"padding: 20px; text-align: center; background: #1e293b; color: #94a3b8;\">\n        <p style=\"margin: 0; font-size: 14px;\">\n          {{companyName}} - Portail d'applications centralisé<br>\n          <em>Ce message a été généré automatiquement.</em>\n        </p>\n      </div>\n    </div>\n    ",
+      "text": "\n{{companyName}} - Accès retiré\n\nBonjour {{userName}},\n\nVotre accès à l'application {{appName}} a été retiré.\n\nDétails de l'application :\n- Application : {{appName}}\n- Retiré par : {{adminName}}\n- Date : {{accessDate}}\n\n⚠️ Important : Vous ne pourrez plus accéder à cette application.\nSi vous pensez qu'il s'agit d'une erreur, contactez votre administrateur à {{supportEmail}}.\n\nSi vous avez des questions concernant cette modification, n'hésitez pas à contacter votre équipe support à {{supportEmail}}.\n\n{{companyName}} - Portail d'applications centralisé\nCe message a été généré automatiquement.\n    ",
+      "variables": [
+        "userName",
+        "appName",
+        "adminName",
+        "accessDate",
+        "companyName",
+        "supportEmail"
+      ],
+      "description": "Email envoyé lors du retrait d'un accès",
+      "category": "access"
+    }
+  ],
+  "settings": {
+    "companyName": "SMT HUB",
+    "supportEmail": "support@smt.com",
+    "websiteUrl": "http://localhost:4000",
+    "logoUrl": "",
+    "primaryColor": "#1e40af",
+    "secondaryColor": "#3b82f6"
+  }
+}

@@ -1,0 +1,23 @@
+[
+  {
+    "id": 1,
+    "nom": "Gmail",
+    "image_url": "",
+    "app_url": "https://gmail.com",
+    "ordre_affichage": 1
+  },
+  {
+    "id": 2,
+    "nom": "Google Drive",
+    "image_url": "",
+    "app_url": "https://drive.google.com",
+    "ordre_affichage": 2
+  },
+  {
+    "id": 3,
+    "nom": "Slack",
+    "image_url": "/placeholder.svg?height=64&width=64&text=Slack",
+    "app_url": "https://slack.com",
+    "ordre_affichage": 3
+  }
+]

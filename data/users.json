@@ -1,0 +1,16 @@
+[
+  {
+    "id": 1,
+    "nom": "Super Administrateur",
+    "email": "admin@smt.com",
+    "mot_de_passe": "$2b$10$sw1LfqwWo.BAFJu.8igN..T.rak1KNRoEnzkLYqBoOwr40tn63ubO",
+    "role": "admin"
+  },
+  {
+    "id": 2,
+    "nom": "Utilisateur Test",
+    "email": "user@smt.com",
+    "mot_de_passe": "$2b$10$JIN4ebUm50qCNCUTMcGoluoOi21eIovsdXWEDdAp2Ie.tQu/ymBVO",
+    "role": "utilisateur"
+  }
+]
