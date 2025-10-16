@@ -3,9 +3,13 @@
 # Script de déploiement SMT HUB
 set -e
 
+# Rollback automatique en cas d'erreur
+trap 'on_error' ERR
+
 # Configuration
 APP_NAME="smt-hub"
 APP_DIR="/var/www/smt-hub"
+LAST_DEPLOY_FILE="$APP_DIR/.last_deploy_commit"
 BACKUP_DIR="/var/backup/smt-hub"
 LOG_DIR="/var/log/smt-hub"
 # Déploiement depuis Git
@@ -51,6 +55,12 @@ error() {
     echo -e "${RED}❌ $1${NC}"
 }
 
+# Gestion d'erreur globale -> rollback
+on_error() {
+    warning "Erreur détectée, tentative de rollback..."
+    rollback_code || true
+}
+
 # Fonction de sauvegarde
 backup() {
     log "Création de la sauvegarde..."
@@ -61,6 +71,7 @@ backup() {
     # Créer la sauvegarde avec timestamp
     BACKUP_NAME="smt-hub-$(date +%Y%m%d_%H%M%S).tar.gz"
     sudo tar -czf "$BACKUP_DIR/$BACKUP_NAME" -C $APP_DIR data/ 2>/dev/null || warning "Aucune donnée à sauvegarder"
+    export LAST_BACKUP="$BACKUP_DIR/$BACKUP_NAME"
     
     success "Sauvegarde créée: $BACKUP_NAME"
 }
@@ -122,6 +133,48 @@ install_redhat_stack() {
     else
         warning "dnf introuvable. Assure-toi d'être sur RedHat/CentOS."
     fi
+}
+
+# Enregistrer les commits (ancien/nouveau) du déploiement
+record_deploy_commits() {
+    local prev_commit="$1"
+    local new_commit="$2"
+    echo "PREVIOUS=$prev_commit" | sudo tee "$LAST_DEPLOY_FILE" >/dev/null
+    echo "CURRENT=$new_commit" | sudo tee -a "$LAST_DEPLOY_FILE" >/dev/null
+}
+
+# Rollback du code (git reset sur le commit précédent) + restauration des données si dispo
+rollback_code() {
+    log "Rollback en cours..."
+    cd "$APP_DIR" 2>/dev/null || { warning "APP_DIR introuvable"; return 0; }
+
+    # Déterminer le commit précédent
+    local prev_commit=""
+    if [ -n "$PREV_COMMIT" ]; then
+        prev_commit="$PREV_COMMIT"
+    elif [ -f "$LAST_DEPLOY_FILE" ]; then
+        prev_commit=$(grep '^PREVIOUS=' "$LAST_DEPLOY_FILE" 2>/dev/null | cut -d'=' -f2)
+    fi
+
+    if [ -n "$prev_commit" ]; then
+        warning "Retour au commit $prev_commit"
+        git reset --hard "$prev_commit" || true
+        # Réinstaller et rebuilder l'ancienne version pour s'assurer d'un état propre
+        npm ci || npm install || true
+        npm run build || true
+        pm2 start ecosystem.config.js --update-env || true
+        pm2 save || true
+    else
+        warning "Aucun commit précédent connu, rollback du code ignoré"
+    fi
+
+    # Restaurer les données si une sauvegarde a été créée
+    if [ -n "$LAST_BACKUP" ] && [ -f "$LAST_BACKUP" ]; then
+        warning "Restauration des données depuis $(basename "$LAST_BACKUP")"
+        sudo tar -xzf "$LAST_BACKUP" -C "$APP_DIR" || true
+    fi
+
+    success "Rollback terminé (si applicable)"
 }
 
 # Configuration PostgreSQL (création base + utilisateur)
@@ -283,6 +336,8 @@ ensure_repo() {
         git remote set-url origin "$REPO_URL"
     else
         cd "$APP_DIR"
+        # Capturer le commit courant avant mise à jour (pour rollback)
+        PREV_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "")
         log "Mise à jour du dépôt existant"
         if [ -n "$GITHUB_TOKEN" ]; then
             git remote set-url origin "$(echo "$REPO_URL" | sed -E "s#https://#https://$GITHUB_TOKEN@#")"
@@ -372,6 +427,10 @@ deploy() {
         exit 1
     fi
     
+    # Enregistrer les commits de déploiement
+    NEW_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "")
+    record_deploy_commits "$PREV_COMMIT" "$NEW_COMMIT"
+
     # Optionnel: retirer les devDependencies après build
     log "Prune des devDependencies pour l'exécution..."
     npm prune --production || true
@@ -530,6 +589,9 @@ case "${1:-deploy}" in
         ;;
     status)
         show_status
+        ;;
+    rollback)
+        rollback_code
         ;;
     help|--help|-h)
         show_help
