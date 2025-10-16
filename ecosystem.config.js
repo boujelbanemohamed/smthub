@@ -9,7 +9,8 @@ module.exports = {
       exec_mode: 'cluster',
       env: {
         NODE_ENV: 'production',
-        PORT: 4000,
+        // Le port peut être surchargé par l'env du système ou le script deploy
+        PORT: process.env.PORT || 4000,
       },
       env_file: '.env.production',
       error_file: '/var/log/smt-hub/error.log',

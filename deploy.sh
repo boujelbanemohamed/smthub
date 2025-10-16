@@ -332,9 +332,36 @@ deploy() {
     fi
     
     # Installation des dépendances
-    log "Installation des dépendances..."
-    npm ci --only=production || npm install --production
+    log "Installation des dépendances (incluant dev pour le build)..."
+    # Next.js/Tailwind nécessitent des devDependencies au build. On installe tout, puis on prune.
+    npm ci || npm install
     
+    # Mettre à jour .env.production avec le port et les URLs publiques
+    log "Mise à jour de .env.production (PORT et URLs publiques)..."
+    touch .env.production
+    # PORT
+    if grep -q '^PORT=' .env.production; then
+        sed -i "s/^PORT=.*/PORT=${APP_PORT}/" .env.production || true
+    else
+        echo "PORT=${APP_PORT}" >> .env.production
+    fi
+    # NEXT_PUBLIC_APP_URL / NEXT_PUBLIC_API_URL
+    if [ "${DOMAIN}" != "_" ]; then
+        PUB_URL="http://${DOMAIN}"
+    else
+        PUB_URL="http://localhost:${APP_PORT}"
+    fi
+    if grep -q '^NEXT_PUBLIC_APP_URL=' .env.production; then
+        sed -i "s#^NEXT_PUBLIC_APP_URL=.*#NEXT_PUBLIC_APP_URL=${PUB_URL}#" .env.production || true
+    else
+        echo "NEXT_PUBLIC_APP_URL=${PUB_URL}" >> .env.production
+    fi
+    if grep -q '^NEXT_PUBLIC_API_URL=' .env.production; then
+        sed -i "s#^NEXT_PUBLIC_API_URL=.*#NEXT_PUBLIC_API_URL=${PUB_URL}/api#" .env.production || true
+    else
+        echo "NEXT_PUBLIC_API_URL=${PUB_URL}/api" >> .env.production
+    fi
+
     # Build de l'application
     log "Build de l'application..."
     npm run build
@@ -345,9 +372,13 @@ deploy() {
         exit 1
     fi
     
+    # Optionnel: retirer les devDependencies après build
+    log "Prune des devDependencies pour l'exécution..."
+    npm prune --production || true
+
     # Démarrer l'application
     log "Démarrage de l'application..."
-    pm2 start ecosystem.config.js
+    pm2 start ecosystem.config.js --update-env
     
     # Sauvegarder la configuration PM2
     pm2 save
@@ -372,10 +403,10 @@ verify_deployment() {
     fi
     
     # Test de connectivité
-    if curl -s -o /dev/null -w "%{http_code}" http://localhost:4000 | grep -q "200\|302"; then
-        success "Application accessible sur le port 4000"
+    if curl -s -o /dev/null -w "%{http_code}" http://localhost:${APP_PORT} | grep -q "200\|302"; then
+        success "Application accessible sur le port ${APP_PORT}"
     else
-        warning "L'application n'est pas accessible sur le port 4000"
+        warning "L'application n'est pas accessible sur le port ${APP_PORT}"
     fi
     
     # Vérifier les logs
