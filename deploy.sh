@@ -141,7 +141,13 @@ setup_postgres() {
 setup_nginx() {
     log "Configuration Nginx (proxy vers 127.0.0.1:$APP_PORT) ..."
     NGINX_CONF_PATH="/etc/nginx/conf.d/smt-hub.conf"
+
+    # Créer une configuration Nginx avancée basée sur les meilleures pratiques
     sudo tee "$NGINX_CONF_PATH" >/dev/null <<EOF
+# Zones de limitation de débit (définies au niveau http)
+limit_req_zone \$binary_remote_addr zone=api:10m rate=10r/s;
+limit_req_zone \$binary_remote_addr zone=login:10m rate=5r/m;
+
 server {
     listen 80;
     server_name ${DOMAIN};
@@ -149,20 +155,79 @@ server {
     access_log /var/log/nginx/smt-hub.access.log;
     error_log  /var/log/nginx/smt-hub.error.log;
 
-    # Sécurité basique
+    # Headers de sécurité
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "no-referrer-when-downgrade" always;
+    add_header X-XSS-Protection "1; mode=block" always;
 
+    # Compression Gzip
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_proxied expired no-cache no-store private must-revalidate auth;
+    gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/javascript application/json;
+
+    # Bloquer l'accès aux fichiers sensibles
+    location ~ /\\. {
+        deny all;
+    }
+    location ~* \\.(env|log|sql|conf|ini|bak|swp|tmp)\$ {
+        deny all;
+    }
+
+    # Cache pour les assets statiques de Next.js
+    location /_next/static/ {
+        alias ${APP_DIR}/.next/static/;
+        expires 365d;
+        access_log off;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # Cache pour les fichiers publics
+    location /public/ {
+        alias ${APP_DIR}/public/;
+        expires 30d;
+        access_log off;
+        add_header Cache-Control "public";
+    }
+
+    # Limitation de débit pour la page de connexion
+    location /api/auth/login {
+        limit_req zone=login burst=5 nodelay;
+        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    # Limitation de débit pour les autres routes API
+    location /api/ {
+        limit_req zone=api burst=20 nodelay;
+        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    # Proxy principal vers l'application
     location / {
         proxy_pass http://127.0.0.1:${APP_PORT};
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_read_timeout 86400;
     }
 }
