@@ -66,7 +66,7 @@ function AppAvatar({ app, size = 48 }: { app: Application, size?: number }) {
   }
 
   if (!app.image_url || imageError) {
-    const backgroundColor = getAvatarColor(app.nom)
+    const backgroundColor = (app as any).avatar_color || getAvatarColor(app.nom)
     const initials = getInitials(app.nom)
 
     return (
@@ -111,6 +111,7 @@ interface Application {
   image_url: string
   app_url: string
   ordre_affichage: number
+  avatar_color?: string
 }
 
 interface UserAccess {
@@ -182,11 +183,16 @@ export default function AdminPage() {
   // États pour les logs
   const [logs, setLogs] = useState<any[]>([])
   const [logsLoading, setLogsLoading] = useState(false)
+  const [logsTotal, setLogsTotal] = useState(0)
+  const [logsHasMore, setLogsHasMore] = useState(false)
+  const [logsPage, setLogsPage] = useState(0)
   const [logFilters, setLogFilters] = useState({
     level: "",
     action: "",
     status: "",
-    limit: 50
+    startDate: "",
+    endDate: "",
+    limit: 10
   })
 
   // Chargement initial des données avec optimisation
@@ -253,6 +259,7 @@ export default function AdminPage() {
   // Recharger les logs quand les filtres changent
   useEffect(() => {
     if (isAuthenticated) {
+      setLogsPage(0)
       loadLogs()
     }
   }, [logFilters])
@@ -590,12 +597,17 @@ export default function AdminPage() {
       if (logFilters.level) params.append("level", logFilters.level)
       if (logFilters.action) params.append("action", logFilters.action)
       if (logFilters.status) params.append("status", logFilters.status)
+      if (logFilters.startDate) params.append("startDate", logFilters.startDate)
+      if (logFilters.endDate) params.append("endDate", logFilters.endDate)
       params.append("limit", logFilters.limit.toString())
+      params.append("offset", String(logsPage * logFilters.limit))
 
       const response = await fetch(`/api/admin/logs?${params}`)
       if (response.ok) {
         const data = await response.json()
         setLogs(data.logs || [])
+        setLogsTotal(data.total || 0)
+        setLogsHasMore(!!data.hasMore)
       }
     } catch (error) {
       console.error("Erreur lors du chargement des logs:", error)
@@ -1737,7 +1749,7 @@ export default function AdminPage() {
                 </CardHeader>
                 <CardContent>
                   {/* Filtres */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
                                          <div>
                        <Label htmlFor="logLevel" className="text-[#1c1e21] font-medium">Niveau</Label>
                        <Select
@@ -1755,6 +1767,26 @@ export default function AdminPage() {
                            <SelectItem value="SUCCESS">Succès</SelectItem>
                          </SelectContent>
                        </Select>
+                     </div>
+                     <div>
+                       <Label htmlFor="logStartDate" className="text-[#1c1e21] font-medium">Du</Label>
+                       <Input
+                         id="logStartDate"
+                         type="date"
+                         value={logFilters.startDate}
+                         onChange={(e) => setLogFilters({ ...logFilters, startDate: e.target.value })}
+                         className="w-full"
+                       />
+                     </div>
+                     <div>
+                       <Label htmlFor="logEndDate" className="text-[#1c1e21] font-medium">Au</Label>
+                       <Input
+                         id="logEndDate"
+                         type="date"
+                         value={logFilters.endDate}
+                         onChange={(e) => setLogFilters({ ...logFilters, endDate: e.target.value })}
+                         className="w-full"
+                       />
                      </div>
                      <div>
                        <Label htmlFor="logAction" className="text-[#1c1e21] font-medium">Action</Label>
@@ -1880,6 +1912,39 @@ export default function AdminPage() {
                       ))}
                     </div>
                   )}
+                  {/* Pagination */}
+                  <div className="mt-4 flex items-center justify-between">
+                    <div className="text-sm text-[#65676b]">
+                      Page {logsPage + 1} • {logsTotal} entrées
+                    </div>
+                    <div className="space-x-2">
+                      <Button
+                        variant="outline"
+                        className="border-[#dadde1] text-[#1c1e21] hover:bg-[#f0f2f5]"
+                        disabled={logsPage === 0 || logsLoading}
+                        onClick={() => {
+                          const next = Math.max(0, logsPage - 1)
+                          setLogsPage(next)
+                          // recharger
+                          loadLogs()
+                        }}
+                      >
+                        Précédent
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="border-[#dadde1] text-[#1c1e21] hover:bg-[#f0f2f5]"
+                        disabled={!logsHasMore || logsLoading}
+                        onClick={() => {
+                          const next = logsPage + 1
+                          setLogsPage(next)
+                          loadLogs()
+                        }}
+                      >
+                        Suivant
+                      </Button>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -2050,7 +2115,8 @@ function ApplicationForm({ application, onSubmit }: { application?: Application 
     nom: application?.nom || "",
     app_url: application?.app_url || "",
     image_url: application?.image_url || "",
-    ordre_affichage: application?.ordre_affichage || 1
+    ordre_affichage: application?.ordre_affichage || 1,
+    avatar_color: application?.avatar_color || "#1877f2"
   })
 
   // Mettre à jour le formulaire quand l'application change
@@ -2060,10 +2126,11 @@ function ApplicationForm({ application, onSubmit }: { application?: Application 
         nom: application.nom || "",
         app_url: application.app_url || "",
         image_url: application.image_url || "",
-        ordre_affichage: application.ordre_affichage || 1
+        ordre_affichage: application.ordre_affichage || 1,
+        avatar_color: application.avatar_color || "#1877f2"
       })
     } else {
-      setFormData({ nom: "", app_url: "", image_url: "", ordre_affichage: 1 })
+      setFormData({ nom: "", app_url: "", image_url: "", ordre_affichage: 1, avatar_color: "#1877f2" })
     }
   }, [application])
 
@@ -2086,6 +2153,19 @@ function ApplicationForm({ application, onSubmit }: { application?: Application 
           className="w-full px-3 py-2 border border-[#dadde1] rounded-md bg-white text-[#1c1e21] placeholder-[#8a8d91] focus:outline-none focus:ring-2 focus:ring-[#1877f2] focus:border-[#1877f2] transition-colors duration-200"
           required
         />
+      </div>
+      <div>
+        <Label htmlFor="avatar_color" className="text-[#1c1e21] font-medium">Couleur de fond de l'avatar</Label>
+        <div className="flex items-center space-x-3">
+          <Input
+            id="avatar_color"
+            type="color"
+            value={formData.avatar_color}
+            onChange={(e) => setFormData({ ...formData, avatar_color: e.target.value })}
+            className="w-16 h-10 p-1 border border-[#dadde1] rounded-md bg-white"
+          />
+          <span className="text-sm text-[#65676b]">{formData.avatar_color}</span>
+        </div>
       </div>
       <div>
         <Label htmlFor="app_url" className="text-[#1c1e21] font-medium">URL de l'application</Label>

@@ -142,5 +142,29 @@
       "appId": 3,
       "appName": "Microsoft Teams"
     }
+  },
+  {
+    "id": "log_1762780326984_wepr2l8ct",
+    "timestamp": "2025-11-10T13:12:06.984Z",
+    "level": "INFO",
+    "action": "Création utilisateur",
+    "userId": 3,
+    "userName": "boujelbane",
+    "details": "Utilisateur créé: boujelbane (boujelbane@gmail.com) avec le rôle utilisateur",
+    "status": "SUCCESS"
+  },
+  {
+    "id": "log_1762780345877_4ehx5sqqy",
+    "timestamp": "2025-11-10T13:12:25.877Z",
+    "level": "INFO",
+    "action": "Accord d'accès",
+    "userId": 3,
+    "userName": "boujelbane",
+    "details": "Accès accordé: boujelbane → Google Drive",
+    "status": "SUCCESS",
+    "metadata": {
+      "appId": 2,
+      "appName": "Google Drive"
+    }
   }
 ]

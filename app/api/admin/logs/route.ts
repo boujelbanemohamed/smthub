@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get("startDate")
     const endDate = searchParams.get("endDate")
     const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!) : 100
+    const offset = searchParams.get("offset") ? parseInt(searchParams.get("offset")!) : 0
 
     const filters = {
       level,
@@ -27,11 +28,16 @@ export async function GET(request: NextRequest) {
       limit
     }
 
-    const logs = await getLogs(filters)
+    const allLogs = await getLogs(filters)
+    const total = allLogs.length
+    const logs = allLogs.slice(offset, offset + limit)
     
     return NextResponse.json({
       logs,
-      total: logs.length,
+      total,
+      limit,
+      offset,
+      hasMore: offset + limit < total,
       filters
     })
   } catch (error) {

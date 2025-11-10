@@ -93,7 +93,7 @@ async function run() {
           update: {
             name: t.name,
             subject: t.subject,
-            content: t.content,
+            content: typeof t.content === "string" ? t.content : "",
             category: t.category,
             enabled: !!t.enabled,
             variables: JSON.stringify(t.variables ?? {}),
@@ -102,7 +102,7 @@ async function run() {
             id: t.id,
             name: t.name,
             subject: t.subject,
-            content: t.content,
+            content: typeof t.content === "string" ? t.content : "",
             category: t.category,
             enabled: !!t.enabled,
             variables: JSON.stringify(t.variables ?? {}),

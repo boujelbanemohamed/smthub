@@ -16,8 +16,16 @@
   {
     "id": 3,
     "nom": "Slack",
-    "image_url": "/placeholder.svg?height=64&width=64&text=Slack",
+    "image_url": "",
     "app_url": "https://slack.com",
-    "ordre_affichage": 3
+    "ordre_affichage": 2
+  },
+  {
+    "id": 4,
+    "nom": "linkedin",
+    "image_url": "",
+    "app_url": "https://fr.linkedin.com/",
+    "ordre_affichage": 1,
+    "avatar_color": "#f218c2"
   }
 ]

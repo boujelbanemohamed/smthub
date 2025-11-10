@@ -76,4 +76,21 @@ model SmtpConfig {
   updatedAt  DateTime @updatedAt
 }
 
+model AccessHistory {
+  id             String   @id @default(cuid())
+  utilisateur_id Int
+  application_id Int
+  action         String   // granted | revoked | modified
+  old_level      String?
+  new_level      String?
+  performed_by   Int
+  performed_at   DateTime @default(now())
+  ip_address     String?
+  user_agent     String?
+
+  @@index([utilisateur_id])
+  @@index([application_id])
+  @@index([performed_at])
+}
+
 

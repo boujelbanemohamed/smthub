@@ -4,6 +4,7 @@ import { promises as fs } from "fs"
 import path from "path"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
+import { logError, logUserAction } from "@/lib/logger"
 
 const USERS_FILE = path.join(process.cwd(), "data", "users.json")
 
@@ -43,6 +44,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!user) {
+      await logError("Login", `Echec connexion: ${email}`, "Email inconnu")
       return NextResponse.json(
         { error: "Email ou mot de passe incorrect" },
         { status: 401 }
@@ -59,6 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isValidPassword) {
+      await logError("Login", `Echec connexion: ${email}`, "Mot de passe incorrect", user?.id, user?.nom)
       return NextResponse.json(
         { error: "Email ou mot de passe incorrect" },
         { status: 401 }
@@ -80,6 +83,8 @@ export async function POST(request: NextRequest) {
       sameSite: "lax",
       maxAge: 60 * 60 * 24 * 7, // 7 jours
     })
+
+    await logUserAction("Login", user.id, user.nom, `Connexion réussie: ${user.email}`)
 
     return NextResponse.json({
       success: true,

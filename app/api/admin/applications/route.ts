@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth"
 import { promises as fs } from "fs"
 import path from "path"
+import { logApplicationAction, logError } from "@/lib/logger"
 
 const DATA_FILE = path.join(process.cwd(), "data", "applications.json")
 
@@ -11,6 +12,7 @@ interface Application {
   image_url: string
   app_url: string
   ordre_affichage: number
+  avatar_color?: string
 }
 
 async function readApplications(): Promise<Application[]> {
@@ -38,6 +40,7 @@ export async function GET() {
     const applications = await readApplications()
     return NextResponse.json(applications.sort((a, b) => a.ordre_affichage - b.ordre_affichage))
   } catch (error) {
+    await logError("Liste applications", "Erreur lors de la lecture des applications", error instanceof Error ? error.message : "Erreur inconnue")
     if (error instanceof Error && error.message === "Admin access required") {
       return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 })
     }
@@ -57,14 +60,25 @@ export async function POST(request: NextRequest) {
       nom: appData.nom,
       image_url: appData.image_url || "",
       app_url: appData.app_url,
-      ordre_affichage: appData.ordre_affichage || applications.length + 1
+      ordre_affichage: appData.ordre_affichage || applications.length + 1,
+      avatar_color: appData.avatar_color || ""
     }
 
     applications.push(newApp)
     await writeApplications(applications)
 
+    await logApplicationAction(
+      "Création application",
+      newApp.id,
+      newApp.nom,
+      0,
+      "Administrateur",
+      `Application créée: ${newApp.nom} (${newApp.app_url})`
+    )
+
     return NextResponse.json(newApp, { status: 201 })
   } catch (error) {
+    await logError("Création application", "Erreur lors de la création d'une application", error instanceof Error ? error.message : "Erreur inconnue")
     if (error instanceof Error && (error.message === "Admin access required" || error.message === "Authentication required")) {
       return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 })
     }

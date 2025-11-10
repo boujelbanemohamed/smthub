@@ -12,5 +12,12 @@
     "email": "user@smt.com",
     "mot_de_passe": "$2b$10$JIN4ebUm50qCNCUTMcGoluoOi21eIovsdXWEDdAp2Ie.tQu/ymBVO",
     "role": "utilisateur"
+  },
+  {
+    "id": 3,
+    "nom": "boujelbane",
+    "email": "boujelbane@gmail.com",
+    "role": "utilisateur",
+    "mot_de_passe": "$2b$10$RaDhz2UIrJ63T2UqK4wSEuIrzKjQztD1cgwDDLjes5VUrlW.UQ08m"
   }
 ]

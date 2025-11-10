@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
+import { logUserAction, logError } from "@/lib/logger"
 
 // Données simulées pour les utilisateurs (partagées avec les autres APIs)
 const mockUsers = [
@@ -49,8 +50,10 @@ export async function GET() {
       return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
     }
 
+    await logUserAction("Consultation profil", user.id, user.nom, "Consultation des informations de profil")
     return NextResponse.json(user)
   } catch (error) {
+    await logError("Consultation profil", "Erreur lors de la lecture du profil", error instanceof Error ? error.message : "Erreur inconnue")
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
   }
 }
@@ -128,8 +131,10 @@ export async function PUT(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 7 // 7 jours
     })
 
+    await logUserAction("Mise à jour profil", users[userIndex].id, users[userIndex].nom, "Profil mis à jour")
     return response
   } catch (error) {
+    await logError("Mise à jour profil", "Erreur lors de la mise à jour du profil", error instanceof Error ? error.message : "Erreur inconnue")
     return NextResponse.json({ error: "Erreur lors de la mise à jour" }, { status: 500 })
   }
 }

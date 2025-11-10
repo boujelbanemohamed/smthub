@@ -1,5 +1,6 @@
 import { promises as fs } from "fs"
 import path from "path"
+import { prisma } from "@/lib/prisma"
 
 export interface LogEntry {
   id: string
@@ -18,6 +19,10 @@ export interface LogEntry {
 }
 
 const LOGS_FILE = path.join(process.cwd(), "data", "admin-logs.json")
+
+function usePostgres(): boolean {
+  return !!process.env.DATABASE_URL || process.env.DATABASE_TYPE === "postgresql"
+}
 
 // Fonction pour générer un ID unique
 function generateLogId(): string {
@@ -60,35 +65,42 @@ export async function logAction(
   metadata?: Record<string, any>
 ): Promise<void> {
   try {
-    const logs = await readLogs()
-    
-    const logEntry: LogEntry = {
-      id: generateLogId(),
-      timestamp: new Date().toISOString(),
-      level,
-      action,
-      userId,
-      userName,
-      details,
-      ip,
-      userAgent,
-      duration,
-      status,
-      errorMessage,
-      metadata
+    if (usePostgres()) {
+      await prisma.adminLog.create({
+        data: {
+          level,
+          action,
+          message: details,
+          details: metadata ? JSON.stringify({ userId, userName, ip, userAgent, duration, errorMessage, metadata }) : JSON.stringify({ userId, userName, ip, userAgent, duration, errorMessage }),
+          status
+        }
+      })
+    } else {
+      const logs = await readLogs()
+      const logEntry: LogEntry = {
+        id: generateLogId(),
+        timestamp: new Date().toISOString(),
+        level,
+        action,
+        userId,
+        userName,
+        details,
+        ip,
+        userAgent,
+        duration,
+        status,
+        errorMessage,
+        metadata
+      }
+      logs.push(logEntry)
+      if (logs.length > 1000) {
+        logs.splice(0, logs.length - 1000)
+      }
+      await writeLogs(logs)
     }
-
-    logs.push(logEntry)
-    
-    // Garder seulement les 1000 derniers logs pour éviter l'explosion du fichier
-    if (logs.length > 1000) {
-      logs.splice(0, logs.length - 1000)
-    }
-
-    await writeLogs(logs)
     
     // Log dans la console pour le développement
-    const logMessage = `[${logEntry.timestamp}] ${level}: ${action} - ${details}`
+    const logMessage = `[${new Date().toISOString()}] ${level}: ${action} - ${details}`
     if (level === "ERROR") {
       console.error(logMessage)
     } else if (level === "WARNING") {
@@ -254,6 +266,45 @@ export async function getLogs(
   }
 ): Promise<LogEntry[]> {
   try {
+    if (usePostgres()) {
+      const where: any = {}
+      if (filters?.level) where.level = filters.level
+      if (filters?.status) where.status = filters.status
+      if (filters?.action) where.action = { contains: filters.action, mode: "insensitive" }
+      if (filters?.startDate || filters?.endDate) {
+        where.createdAt = {}
+        if (filters.startDate) where.createdAt.gte = new Date(filters.startDate)
+        if (filters.endDate) where.createdAt.lte = new Date(filters.endDate)
+      }
+      const rows = await prisma.adminLog.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        take: filters?.limit || 100
+      })
+      // Adapter au format LogEntry pour compatibilité UI
+      return rows.map(r => {
+        let parsed: any = {}
+        try {
+          parsed = r.details ? JSON.parse(r.details) : {}
+        } catch {
+          parsed = {}
+        }
+        const entry: LogEntry = {
+          id: String(r.id),
+          timestamp: r.createdAt.toISOString(),
+          level: r.level as any,
+          action: r.action,
+          details: r.message,
+          status: r.status as any,
+        }
+        if (parsed.userId !== undefined) entry.userId = parsed.userId
+        if (parsed.userName !== undefined) entry.userName = parsed.userName
+        if (parsed.errorMessage) entry.errorMessage = parsed.errorMessage
+        if (parsed.metadata) entry.metadata = parsed.metadata
+        return entry
+      })
+    }
+
     const logs = await readLogs()
     let filteredLogs = [...logs]
 
@@ -303,16 +354,23 @@ export async function getLogs(
 // Fonction pour nettoyer les anciens logs
 export async function cleanOldLogs(daysToKeep: number = 30): Promise<void> {
   try {
-    const logs = await readLogs()
-    const cutoffDate = new Date()
-    cutoffDate.setDate(cutoffDate.getDate() - daysToKeep)
-    
-    const filteredLogs = logs.filter(log => 
-      new Date(log.timestamp) > cutoffDate
-    )
-    
-    await writeLogs(filteredLogs)
-    console.log(`Nettoyage des logs: ${logs.length - filteredLogs.length} entrées supprimées`)
+    if (usePostgres()) {
+      const cutoffDate = new Date()
+      cutoffDate.setDate(cutoffDate.getDate() - daysToKeep)
+      await prisma.adminLog.deleteMany({
+        where: { createdAt: { lte: cutoffDate } }
+      })
+      console.log(`Nettoyage des logs (DB): > ${daysToKeep} jours supprimés`)
+    } else {
+      const logs = await readLogs()
+      const cutoffDate = new Date()
+      cutoffDate.setDate(cutoffDate.getDate() - daysToKeep)
+      const filteredLogs = logs.filter(log => 
+        new Date(log.timestamp) > cutoffDate
+      )
+      await writeLogs(filteredLogs)
+      console.log(`Nettoyage des logs: ${logs.length - filteredLogs.length} entrées supprimées`)
+    }
   } catch (error) {
     console.error("Erreur lors du nettoyage des logs:", error)
   }
