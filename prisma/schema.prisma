@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int       @id @default(autoincrement())
+  nom           String
+  email         String    @unique
+  role          String    @default("utilisateur")
+  mot_de_passe  String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  userAccess    UserAccess[]
+}
+
+model Application {
+  id              Int       @id @default(autoincrement())
+  nom             String
+  image_url       String
+  app_url         String
+  ordre_affichage Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  userAccess      UserAccess[]
+}
+
+model UserAccess {
+  id             Int    @id @default(autoincrement())
+  utilisateur_id Int
+  application_id Int
+  createdAt      DateTime @default(now())
+
+  user        User        @relation(fields: [utilisateur_id], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [application_id], references: [id], onDelete: Cascade)
+
+  @@unique([utilisateur_id, application_id])
+}
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  subject   String
+  content   String
+  category  String
+  enabled   Boolean  @default(true)
+  variables String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AdminLog {
+  id        Int      @id @default(autoincrement())
+  level     String
+  action    String
+  message   String
+  details   String?
+  status    String   @default("SUCCESS")
+  createdAt DateTime @default(now())
+}
+
+model SmtpConfig {
+  id         Int      @id @default(autoincrement())
+  host       String
+  port       Int
+  user       String
+  password   String
+  from_name  String
+  from_email String
+  secure     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+

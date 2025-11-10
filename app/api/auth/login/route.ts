@@ -3,6 +3,7 @@ import { cookies } from "next/headers"
 import { promises as fs } from "fs"
 import path from "path"
 import bcrypt from "bcryptjs"
+import { prisma } from "@/lib/prisma"
 
 const USERS_FILE = path.join(process.cwd(), "data", "users.json")
 
@@ -26,8 +27,20 @@ interface User {
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json()
-    const users = await readUsers()
-    const user = users.find((u) => u.email === email)
+    const usePostgres = process.env.DATABASE_TYPE === "postgresql" || !!process.env.DATABASE_URL
+
+    let user: any | null = null
+    if (usePostgres) {
+      try {
+        user = await prisma.user.findUnique({ where: { email } })
+      } catch (e) {
+        console.error("Erreur Prisma (login), fallback JSON:", e)
+      }
+    }
+    if (!user) {
+      const users = await readUsers()
+      user = users.find((u) => u.email === email) || null
+    }
 
     if (!user) {
       return NextResponse.json(

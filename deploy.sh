@@ -390,6 +390,13 @@ deploy() {
     log "Installation des dépendances (incluant dev pour le build)..."
     # Next.js/Tailwind nécessitent des devDependencies au build. On installe tout, puis on prune.
     npm ci || npm install
+
+    # Prisma (si PostgreSQL activé)
+    if [ "$POSTGRES_ENABLE" = "true" ]; then
+        log "Prisma generate & db push..."
+        npx prisma generate || { error "prisma generate a échoué"; exit 1; }
+        npx prisma db push || { error "prisma db push a échoué"; exit 1; }
+    fi
     
     # Mettre à jour .env.production avec le port et les URLs publiques
     log "Mise à jour de .env.production (PORT et URLs publiques)..."

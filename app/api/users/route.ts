@@ -3,6 +3,8 @@ import { promises as fs } from "fs"
 import path from "path"
 import { sendEmail, generateWelcomeEmail } from "@/lib/email-service"
 import { cache } from "@/lib/cache"
+import { prisma } from "@/lib/prisma"
+import bcrypt from "bcryptjs"
 
 const USERS_FILE = path.join(process.cwd(), "data", "users.json")
 
@@ -54,10 +56,16 @@ async function writeUsers(users: User[]) {
 
 export async function GET() {
   try {
-    const users = await readUsers()
-    // Remove passwords from response
-    const safeUsers = users.map(({ mot_de_passe, ...user }) => user)
-    return NextResponse.json(safeUsers)
+    const usePostgres = process.env.DATABASE_TYPE === "postgresql" || !!process.env.DATABASE_URL
+    if (usePostgres) {
+      const users = await prisma.user.findMany({ orderBy: { id: "asc" } })
+      const safe = users.map(({ mot_de_passe, ...u }) => u)
+      return NextResponse.json(safe)
+    } else {
+      const users = await readUsers()
+      const safeUsers = users.map(({ mot_de_passe, ...user }) => user)
+      return NextResponse.json(safeUsers)
+    }
   } catch (error) {
     return NextResponse.json({ error: "Erreur lors de la lecture" }, { status: 500 })
   }
@@ -71,38 +79,49 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Champs requis manquants" }, { status: 400 })
     }
 
-    const users = await readUsers()
-
-    // Check if email already exists
-    if (users.some((user) => user.email === email)) {
-      return NextResponse.json({ error: "Cet email est déjà utilisé" }, { status: 400 })
+    const usePostgres = process.env.DATABASE_TYPE === "postgresql" || !!process.env.DATABASE_URL
+    let created: any
+    if (usePostgres) {
+      const exists = await prisma.user.findUnique({ where: { email } })
+      if (exists) {
+        return NextResponse.json({ error: "Cet email est déjà utilisé" }, { status: 400 })
+      }
+      const hashed = password.startsWith("$2a$") || password.startsWith("$2b$") || password.startsWith("$2y$")
+        ? password
+        : await bcrypt.hash(password, 10)
+      created = await prisma.user.create({
+        data: { nom, email, role, mot_de_passe: hashed },
+        select: { id: true, nom: true, email: true, role: true },
+      })
+    } else {
+      const users = await readUsers()
+      if (users.some((user) => user.email === email)) {
+        return NextResponse.json({ error: "Cet email est déjà utilisé" }, { status: 400 })
+      }
+      const newId = Math.max(0, ...users.map((user) => user.id)) + 1
+      const newUser: User = {
+        id: newId,
+        nom,
+        email,
+        mot_de_passe: password,
+        role,
+      }
+      users.push(newUser)
+      await writeUsers(users)
+      const { mot_de_passe, ...safe } = newUser
+      created = safe
     }
-
-    const newId = Math.max(0, ...users.map((user) => user.id)) + 1
-
-    const newUser: User = {
-      id: newId,
-      nom,
-      email,
-      mot_de_passe: password,
-      role,
-    }
-
-    users.push(newUser)
-    await writeUsers(users)
 
     // Envoyer l'email de bienvenue (en arrière-plan)
     try {
-      const welcomeEmail = generateWelcomeEmail(newUser.nom, newUser.email)
+      const welcomeEmail = generateWelcomeEmail(nom, email)
       await sendEmail(welcomeEmail)
     } catch (emailError) {
       console.error("Erreur lors de l'envoi de l'email de bienvenue:", emailError)
       // Ne pas faire échouer la création si l'email ne peut pas être envoyé
     }
 
-    // Return user without password
-    const { mot_de_passe, ...safeUser } = newUser
-    return NextResponse.json(safeUser, { status: 201 })
+    return NextResponse.json(created, { status: 201 })
   } catch (error) {
     return NextResponse.json({ error: "Erreur lors de la création" }, { status: 500 })
   }
