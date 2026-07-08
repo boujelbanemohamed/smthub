@@ -1,0 +1,76 @@
+import { type NextRequest, NextResponse } from "next/server"
+import { promises as fs } from "fs"
+import path from "path"
+import { requireAdmin, authErrorResponse } from "@/lib/auth"
+import { logAccessAction } from "@/lib/logger"
+
+const ACCESS_FILE = path.join(process.cwd(), "data", "user_access.json")
+
+interface Access {
+  utilisateur_id: number
+  application_id: number
+}
+
+async function readAccess(): Promise<Access[]> {
+  try {
+    return JSON.parse(await fs.readFile(ACCESS_FILE, "utf-8"))
+  } catch {
+    return []
+  }
+}
+
+async function writeAccess(items: Access[]) {
+  await fs.mkdir(path.dirname(ACCESS_FILE), { recursive: true })
+  await fs.writeFile(ACCESS_FILE, JSON.stringify(items, null, 2))
+}
+
+// POST { user_ids: number[], application_ids: number[], action: "grant" | "revoke" }
+// Accorde (ou révoque) en lot un ensemble d'applications à un ensemble
+// d'utilisateurs — « donner accès à un lot d'apps à un groupe d'utilisateurs ».
+export async function POST(request: NextRequest) {
+  try {
+    const admin = await requireAdmin()
+    const { user_ids, application_ids, action } = await request.json()
+
+    if (!Array.isArray(user_ids) || !Array.isArray(application_ids) || user_ids.length === 0 || application_ids.length === 0) {
+      return NextResponse.json({ error: "Sélectionnez au moins un utilisateur et une application" }, { status: 400 })
+    }
+    const mode = action === "revoke" ? "revoke" : "grant"
+
+    let access = await readAccess()
+    const has = (u: number, a: number) => access.some((x) => x.utilisateur_id === u && x.application_id === a)
+
+    let changed = 0
+    for (const u of user_ids) {
+      for (const a of application_ids) {
+        const uid = Number(u), aid = Number(a)
+        if (Number.isNaN(uid) || Number.isNaN(aid)) continue
+        if (mode === "grant") {
+          if (!has(uid, aid)) {
+            access.push({ utilisateur_id: uid, application_id: aid })
+            changed++
+          }
+        } else {
+          if (has(uid, aid)) {
+            access = access.filter((x) => !(x.utilisateur_id === uid && x.application_id === aid))
+            changed++
+          }
+        }
+      }
+    }
+
+    await writeAccess(access)
+    await logAccessAction(
+      mode === "grant" ? "Accord d'accès groupé" : "Révocation d'accès groupée",
+      0,
+      "-",
+      0,
+      "-",
+      `${changed} accès ${mode === "grant" ? "accordé(s)" : "révoqué(s)"} pour ${user_ids.length} utilisateur(s) × ${application_ids.length} application(s) | par: ${admin.nom}`
+    )
+
+    return NextResponse.json({ changed })
+  } catch (error) {
+    return authErrorResponse(error) || NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
+  }
+}

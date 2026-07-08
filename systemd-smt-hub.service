@@ -1,0 +1,36 @@
+[Unit]
+Description=SMT HUB Application
+After=network.target
+Wants=network.target
+
+[Service]
+Type=forking
+User=nginx
+Group=nginx
+WorkingDirectory=/var/www/smt-hub
+ExecStart=/usr/bin/pm2 start ecosystem.config.js
+ExecStop=/usr/bin/pm2 stop smt-hub
+ExecReload=/usr/bin/pm2 reload smt-hub
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=smt-hub
+
+# Environment variables
+Environment=NODE_ENV=production
+Environment=PORT=4000
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/smt-hub /var/log/smt-hub /var/backup/smt-hub
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target 
