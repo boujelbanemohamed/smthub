@@ -20,11 +20,12 @@ yarn-error.log*
 .env*
 !.env.example
 
+# données applicatives (ne jamais versionner : utilisateurs, logs, annonces…)
+/data/
+
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-# données applicatives (ne pas versionner)
-/data/

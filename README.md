@@ -30,24 +30,68 @@ coffre-fort d'identifiants personnel. Construit avec **Next.js 14** (App Router)
 | ORM (option) | Prisma + PostgreSQL |
 | Emails | Nodemailer (SMTP) |
 
-## 🚀 Démarrage rapide
+## 🚀 Démarrage rapide (développement)
 
-Prérequis : **Node.js 18+**.
+Prérequis : **Node.js 18.17+ ou 20 LTS**.
 
 ```bash
 # 1. Installer les dépendances
 npm install
 
-# 2. Configurer les variables d'environnement (voir ci-dessous)
-cp env.production.example .env.local   # puis éditez les valeurs
+# 2. Créer votre configuration à partir du modèle documenté
+cp .env.example .env.local
 
-# 3. Créer un premier administrateur (aucun compte par défaut)
+# 3. Générer les 2 secrets obligatoires et les coller dans .env.local
+openssl rand -base64 48   # → SESSION_SECRET
+openssl rand -base64 48   # → CREDENTIALS_SECRET
+
+# 4. Créer un premier administrateur (aucun compte par défaut n'est livré)
 ADMIN_EMAIL=admin@votre-domaine.com ADMIN_PASSWORD='UnMotDePasseFort!' npm run seed:admin
 
-# 4. Lancer en développement
+# 5. Lancer en développement
 npm run dev
 # → http://localhost:4000
 ```
+
+## 🖥️ Installation en production (Red Hat / RHEL 8-9)
+
+Guide résumé (détails et durcissement dans [`DEPLOYMENT_REDHAT.md`](./DEPLOYMENT_REDHAT.md)).
+
+```bash
+# 1. Node.js 20 LTS
+curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+sudo dnf install -y nodejs
+
+# 2. Récupérer le code
+git clone https://github.com/boujelbanemohamed/smthub.git
+cd smthub
+
+# 3. Dépendances + configuration
+npm install
+cp .env.example .env
+#   → éditez .env : NODE_ENV=production, SESSION_SECRET, CREDENTIALS_SECRET,
+#     NEXT_PUBLIC_APP_URL (et DATABASE_URL si PostgreSQL)
+
+# 4. (Option PostgreSQL) créer la base puis :
+#   npx prisma db push
+
+# 5. Premier administrateur
+ADMIN_EMAIL=admin@mon-domaine.com ADMIN_PASSWORD='MotDePasseFort!' npm run seed:admin
+
+# 6. Build + lancement
+npm run build
+npm run start        # écoute sur le port 4000
+```
+
+**Recommandé en production :**
+- **Reverse proxy nginx + HTTPS** devant le port 4000 — exemple fourni : [`nginx-smt-hub.conf`](./nginx-smt-hub.conf). Cookies de session `secure` → HTTPS obligatoire.
+- **Gestionnaire de processus** : PM2 ([`ecosystem.config.js`](./ecosystem.config.js)) ou service **systemd** ([`systemd-smt-hub.service`](./systemd-smt-hub.service)).
+- **SELinux** : `sudo setsebool -P httpd_can_network_connect 1` (proxy nginx).
+- **Firewalld** : ouvrir 80/443 (`sudo firewall-cmd --permanent --add-service=http --add-service=https && sudo firewall-cmd --reload`).
+- **PostgreSQL 13+** conseillé pour un usage multi-utilisateurs durable ; le mode fichier JSON convient à un serveur unique.
+
+> Le dossier `data/` (données applicatives) et les fichiers `.env*` ne sont pas
+> versionnés : sauvegardez-les séparément lors des mises à jour.
 
 ## 🔐 Variables d'environnement
 
@@ -59,8 +103,11 @@ npm run dev
 | `SMTP_PASS` | Optionnel | Mot de passe SMTP (sinon dans la config SMTP). |
 | `NEXT_PUBLIC_APP_URL` | Recommandé | URL publique (liens dans les emails). |
 
-> ⚠️ Ne commitez jamais les secrets. `.env*`, `data/smtp-config.json` et
-> `data/app-credentials.json` sont ignorés par Git.
+Le fichier [`.env.example`](./.env.example) documente **toutes** les variables
+(obligatoires, base de données, SMTP, sauvegardes, scripts).
+
+> ⚠️ Ne commitez jamais les secrets ni les données. Les fichiers `.env*`
+> (sauf `.env.example`) et le dossier `data/` sont ignorés par Git.
 
 ## 📜 Scripts npm
 
