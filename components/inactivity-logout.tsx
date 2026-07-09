@@ -23,20 +23,16 @@ export function InactivityLogout() {
   const [showWarning, setShowWarning] = useState(false)
   const [remaining, setRemaining] = useState(WARNING_BEFORE)
 
-  // Refs pour éviter de recréer les timers à chaque rendu
-  const warningTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Horodatage (temps réel) de la dernière activité : sert de référence au lieu
+  // de compter des « tics » de minuteur, qui sont ralentis quand l'onglet est
+  // en arrière-plan. Ainsi le calcul reste exact même après une mise en veille.
+  const lastActivityRef = useRef(Date.now())
   const showWarningRef = useRef(false)
-
-  const clearTimers = useCallback(() => {
-    if (warningTimer.current) clearTimeout(warningTimer.current)
-    if (countdownTimer.current) clearInterval(countdownTimer.current)
-    warningTimer.current = null
-    countdownTimer.current = null
-  }, [])
+  const loggingOutRef = useRef(false)
 
   const logout = useCallback(async () => {
-    clearTimers()
+    if (loggingOutRef.current) return
+    loggingOutRef.current = true
     showWarningRef.current = false
     try {
       await fetch("/api/auth/logout", { method: "POST" })
@@ -44,58 +40,74 @@ export function InactivityLogout() {
       // on redirige quand même
     }
     router.push("/login")
-  }, [clearTimers, router])
+  }, [router])
 
-  // Lance (ou relance) le cycle complet de 15 min
-  const startCycle = useCallback(() => {
-    clearTimers()
+  // Réinitialise le compteur (activité détectée ou clic « Je suis toujours là »)
+  const resetInactivity = useCallback(() => {
+    lastActivityRef.current = Date.now()
     showWarningRef.current = false
     setShowWarning(false)
-    warningTimer.current = setTimeout(() => {
-      // 10 min écoulées sans activité → on affiche la fenêtre et le décompte
+  }, [])
+
+  // Évalue l'état à partir du TEMPS RÉEL écoulé depuis la dernière activité.
+  // Appelée chaque seconde, mais aussi au retour sur l'onglet (visibilitychange
+  // / focus) : si l'inactivité a dépassé la limite pendant l'absence, la
+  // déconnexion est déclenchée immédiatement au retour.
+  const evaluate = useCallback(() => {
+    const elapsed = (Date.now() - lastActivityRef.current) / 1000
+    if (elapsed >= INACTIVITY_LIMIT) {
+      logout()
+      return
+    }
+    if (elapsed >= WARNING_AT) {
       showWarningRef.current = true
-      setRemaining(WARNING_BEFORE)
       setShowWarning(true)
-      countdownTimer.current = setInterval(() => {
-        setRemaining((prev) => {
-          if (prev <= 1) {
-            logout()
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-    }, WARNING_AT * 1000)
-  }, [clearTimers, logout])
+      setRemaining(Math.max(0, Math.ceil(INACTIVITY_LIMIT - elapsed)))
+    } else if (showWarningRef.current) {
+      showWarningRef.current = false
+      setShowWarning(false)
+    }
+  }, [logout])
 
   // « Je suis toujours là » : ferme la fenêtre et repart pour un cycle complet
   const stayConnected = useCallback(() => {
-    startCycle()
-  }, [startCycle])
+    resetInactivity()
+  }, [resetInactivity])
 
   useEffect(() => {
     if (disabled) {
-      clearTimers()
       setShowWarning(false)
       return
     }
 
-    // Toute activité relance le cycle — mais uniquement TANT QUE la fenêtre
-    // d'avertissement n'est pas affichée. Une fois la fenêtre visible, seul le
+    resetInactivity()
+
+    // Toute activité remet le compteur à zéro — mais uniquement TANT QUE la
+    // fenêtre d'avertissement n'est pas affichée. Une fois visible, seul le
     // bouton « Je suis toujours là » peut relancer (réponse A = i).
     const onActivity = () => {
       if (showWarningRef.current) return
-      startCycle()
+      lastActivityRef.current = Date.now()
+    }
+    // Au retour sur l'onglet, réévaluer immédiatement le temps réel écoulé.
+    const onVisible = () => {
+      if (typeof document === "undefined" || document.visibilityState === "visible") evaluate()
     }
 
     ACTIVITY_EVENTS.forEach((ev) => window.addEventListener(ev, onActivity, { passive: true }))
-    startCycle()
+    document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener("focus", onVisible)
+
+    const id = setInterval(evaluate, 1000)
+    evaluate()
 
     return () => {
       ACTIVITY_EVENTS.forEach((ev) => window.removeEventListener(ev, onActivity))
-      clearTimers()
+      document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener("focus", onVisible)
+      clearInterval(id)
     }
-  }, [disabled, pathname, startCycle, clearTimers])
+  }, [disabled, pathname, evaluate, resetInactivity])
 
   // Heartbeat de présence : signale que l'utilisateur est en ligne (au montage
   // puis toutes les 60 s) pour alimenter les listes « connectés / non connectés ».

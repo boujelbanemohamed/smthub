@@ -2827,7 +2827,34 @@ function AnnouncementsPanel({ users }: { users: User[] }) {
   const [targetUsers, setTargetUsers] = useState<number[]>([])
   const [groups, setGroups] = useState<{ id: string; nom: string; member_ids: number[] }[]>([])
   const [dismissible, setDismissible] = useState(true)
+  const [editId, setEditId] = useState<string | null>(null)
   const standardUsers = users.filter((u) => u.role !== "admin")
+
+  const resetForm = () => {
+    setEditId(null); setMessage(""); setLevel("info"); setMode("permanent")
+    setStartDate(""); setEndDate(""); setAudience("all"); setGroupId(""); setTargetUsers([]); setDismissible(true); setError("")
+  }
+
+  // Charge une annonce existante dans le formulaire pour la modifier
+  const startEdit = (a: AnnItem) => {
+    setEditId(a.id)
+    setMessage(a.message)
+    setLevel(a.level)
+    setMode(a.start_date || a.end_date ? "scheduled" : "permanent")
+    const toLocal = (iso?: string | null) => {
+      if (!iso) return ""
+      const d = new Date(iso); const p = (n: number) => String(n).padStart(2, "0")
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+    }
+    setStartDate(toLocal(a.start_date))
+    setEndDate(toLocal(a.end_date))
+    setAudience(a.audience || "all")
+    setGroupId(a.group_id || "")
+    setTargetUsers(a.user_ids || [])
+    setDismissible(a.dismissible !== false)
+    setError("")
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" })
+  }
 
   const load = async () => {
     try {
@@ -2851,21 +2878,24 @@ function AnnouncementsPanel({ users }: { users: User[] }) {
     setLoading(true)
     try {
       const body: any = { message, level, audience, dismissible }
+      // En modification, on envoie toujours les dates (pour pouvoir les effacer) ;
+      // en création, seulement si mode programmé.
       if (mode === "scheduled") {
         body.start_date = startDate ? new Date(startDate).toISOString() : null
         body.end_date = endDate ? new Date(endDate).toISOString() : null
+      } else if (editId) {
+        body.start_date = null
+        body.end_date = null
       }
       if (audience === "group") body.group_id = groupId
       if (audience === "users") body.user_ids = targetUsers
-      const res = await fetch("/api/announcements", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
+      const res = editId
+        ? await fetch("/api/announcements", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, id: editId }) })
+        : await fetch("/api/announcements", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       const data = await res.json()
       if (res.ok) {
-        setMessage(""); setLevel("info"); setMode("permanent"); setStartDate(""); setEndDate("")
-        setAudience("all"); setGroupId(""); setTargetUsers([]); setDismissible(true); await load()
-      } else setError(data.error || "Erreur lors de la publication.")
+        resetForm(); await load()
+      } else setError(data.error || "Erreur lors de l'enregistrement.")
     } finally { setLoading(false) }
   }
   const toggle = async (id: string) => {
@@ -2891,7 +2921,7 @@ function AnnouncementsPanel({ users }: { users: User[] }) {
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="space-y-3">
-          <Label className="text-ink font-medium">Nouvelle annonce</Label>
+          <Label className="text-ink font-medium">{editId ? "Modifier l'annonce" : "Nouvelle annonce"}</Label>
           <Input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Message affiché à tous les utilisateurs…" className="bg-surface border-line text-ink" />
           <div className="flex flex-wrap items-center gap-3">
             <select value={level} onChange={(e) => setLevel(e.target.value as any)} className="border border-line rounded-md bg-surface text-ink px-3 h-10">
@@ -2953,9 +2983,16 @@ function AnnouncementsPanel({ users }: { users: User[] }) {
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
-          <Button onClick={publish} disabled={loading || !message.trim()} className="bg-brand hover:bg-brand-hover text-white gap-2">
-            <Plus className="w-4 h-4" /> Publier
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={publish} disabled={loading || !message.trim()} className="bg-brand hover:bg-brand-hover text-white gap-2">
+              {editId ? <><Edit className="w-4 h-4" /> Enregistrer les modifications</> : <><Plus className="w-4 h-4" /> Publier</>}
+            </Button>
+            {editId && (
+              <Button variant="outline" className="border-line text-ink" onClick={resetForm} disabled={loading}>
+                Annuler
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -2984,6 +3021,9 @@ function AnnouncementsPanel({ users }: { users: User[] }) {
                   </span>
                 )}
               </div>
+              <Button variant="outline" size="sm" className="border-line text-ink" onClick={() => startEdit(a)}>
+                <Edit className="w-4 h-4" />
+              </Button>
               <Button variant="outline" size="sm" className="border-line text-ink" onClick={() => toggle(a.id)}>
                 {a.active ? "Désactiver" : "Activer"}
               </Button>

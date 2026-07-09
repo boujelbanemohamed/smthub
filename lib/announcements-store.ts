@@ -97,6 +97,32 @@ export async function deleteAnnouncement(id: string): Promise<boolean> {
   return true
 }
 
+// Met à jour une annonce existante (message, niveau, dates, audience, fermeture…).
+// Seuls les champs fournis sont modifiés ; l'id, l'auteur et la date de création
+// restent inchangés.
+export async function updateAnnouncement(
+  id: string,
+  fields: Partial<Pick<Announcement, "message" | "level" | "start_date" | "end_date" | "audience" | "group_id" | "user_ids" | "dismissible">>
+): Promise<Announcement | null> {
+  const items = await listAnnouncements()
+  const item = items.find((a) => a.id === id)
+  if (!item) return null
+
+  if (typeof fields.message === "string" && fields.message.trim()) item.message = fields.message.trim()
+  if (fields.level && ["info", "warning", "success"].includes(fields.level)) item.level = fields.level
+  if (fields.audience && ["all", "group", "users"].includes(fields.audience)) {
+    item.audience = fields.audience
+    item.group_id = fields.audience === "group" ? (fields.group_id || null) : null
+    item.user_ids = fields.audience === "users" ? (Array.isArray(fields.user_ids) ? fields.user_ids : []) : []
+  }
+  if (fields.start_date !== undefined) item.start_date = fields.start_date || null
+  if (fields.end_date !== undefined) item.end_date = fields.end_date || null
+  if (typeof fields.dismissible === "boolean") item.dismissible = fields.dismissible
+
+  await save(items)
+  return item
+}
+
 export async function toggleAnnouncement(id: string): Promise<Announcement | null> {
   const items = await listAnnouncements()
   const item = items.find((a) => a.id === id)

@@ -277,20 +277,21 @@ export default function HomePage() {
 
         setUser(authData.user)
 
-        // Charger les applications de l'utilisateur
-        const appsResponse = await fetch("/api/user-applications")
-        if (appsResponse.ok) {
-          const appsData = await appsResponse.json()
-          setApplications(appsData)
-        }
-
-        // Charger identifiants enregistrés + favoris + annonces + top apps
-        await Promise.all([loadCredAppIds(), loadFavorites(), loadAnnouncements(), loadTopApps()])
-
-        // Admin : listes connectés / non connectés
-        if (authData.user?.role === "admin") {
-          loadPresence()
-        }
+        // Une fois l'utilisateur connu, tous les chargements sont indépendants :
+        // on les lance EN PARALLÈLE (au lieu d'une cascade) pour réduire le temps
+        // total au plus lent des appels et non à leur somme.
+        const isAdmin = authData.user?.role === "admin"
+        await Promise.all([
+          fetch("/api/user-applications")
+            .then((r) => (r.ok ? r.json() : []))
+            .then((d) => setApplications(d))
+            .catch(() => {}),
+          loadCredAppIds(),
+          loadFavorites(),
+          loadAnnouncements(),
+          loadTopApps(),
+          isAdmin ? loadPresence() : Promise.resolve(),
+        ])
       } catch (error) {
         console.error("Erreur lors du chargement:", error)
         router.push("/login")
