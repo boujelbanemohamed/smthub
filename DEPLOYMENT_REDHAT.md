@@ -166,7 +166,16 @@ npm run build
 ```
 
 #### **3.2 Configuration PM2**
-Créer `ecosystem.config.js` :
+Un fichier `ecosystem.config.js` est **déjà fourni** à la racine du projet —
+utilisez-le tel quel (`pm2 start ecosystem.config.js`).
+
+> ⚠️ **Ne mettez PAS `instances: 'max'` / `exec_mode: 'cluster'`** tant que
+> l'application utilise le stockage fichier JSON (`data/`). Plusieurs processus
+> écrivant les mêmes fichiers en parallèle **corrompent les données**. Le fichier
+> fourni force donc **une seule instance** (`instances: 1`, `exec_mode: 'fork'`).
+> Le mode cluster n'est autorisé qu'en base **PostgreSQL** (`DATABASE_URL`).
+
+Contenu (pour référence) :
 ```javascript
 module.exports = {
   apps: [
@@ -175,8 +184,8 @@ module.exports = {
       script: 'node_modules/next/dist/bin/next',
       args: 'start',
       cwd: '/var/www/smt-hub',
-      instances: 'max',
-      exec_mode: 'cluster',
+      instances: 1,          // une seule instance avec le stockage fichier JSON
+      exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
         PORT: 4000,
@@ -232,6 +241,9 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "no-referrer-when-downgrade" always;
     add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
+
+    # Taille max des envois : les dépôts de code peuvent atteindre ~50 Mo.
+    client_max_body_size 60m;
 
     # Configuration des logs
     access_log /var/log/nginx/smt-hub.access.log;
