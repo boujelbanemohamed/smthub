@@ -558,6 +558,11 @@ export default function HomePage() {
                       <h3 className="font-medium text-ink text-sm line-clamp-2 group-hover:text-brand transition-colors duration-200">
                         {app.nom}
                       </h3>
+                      {(app.category || "").trim() ? (
+                        <span className="mt-1 inline-block rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-medium text-brand">
+                          {app.category}
+                        </span>
+                      ) : null}
                     </Link>
 
                     {/* Bouton coffre-fort d'identifiants */}
