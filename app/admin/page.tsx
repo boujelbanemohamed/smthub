@@ -132,6 +132,11 @@ interface UserAccess {
   application_id: number
 }
 
+interface Category {
+  id: string
+  name: string
+}
+
 export default function AdminPage() {
   const router = useRouter()
 
@@ -141,6 +146,13 @@ export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([])
   const [applications, setApplications] = useState<Application[]>([])
   const [userAccess, setUserAccess] = useState<UserAccess[]>([])
+
+  // Catégories d'applications (modérables : ajout / renommage / suppression)
+  const [categories, setCategories] = useState<Category[]>([])
+  const [newCategory, setNewCategory] = useState("")
+  const [editingCatId, setEditingCatId] = useState<string | null>(null)
+  const [editingCatName, setEditingCatName] = useState("")
+  const [categoryError, setCategoryError] = useState("")
 
   // États des formulaires
   const [editingUser, setEditingUser] = useState<User | null>(null)
@@ -277,7 +289,8 @@ export default function AdminPage() {
         // Chargement différé des données secondaires
         Promise.all([
           loadEmailTemplates(),
-          loadLogs()
+          loadLogs(),
+          loadCategories()
         ]).catch(error => {
           console.error("Erreur lors du chargement des données secondaires:", error)
         })
@@ -557,6 +570,62 @@ export default function AdminPage() {
   const refreshApps = async () => {
     const res = await fetch("/api/admin/applications")
     if (res.ok) setApplications(await res.json())
+  }
+
+  // --- Gestion des catégories (modération) ---
+  const loadCategories = async () => {
+    const res = await fetch("/api/admin/categories")
+    if (res.ok) setCategories(await res.json())
+  }
+
+  const handleAddCategory = async () => {
+    setCategoryError("")
+    const name = newCategory.trim()
+    if (!name) return
+    const res = await fetch("/api/admin/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    })
+    if (res.ok) {
+      setNewCategory("")
+      await loadCategories()
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setCategoryError(data.error || "Erreur lors de l'ajout")
+    }
+  }
+
+  const handleRenameCategory = async (id: string) => {
+    setCategoryError("")
+    const name = editingCatName.trim()
+    if (!name) return
+    const res = await fetch(`/api/admin/categories/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    })
+    if (res.ok) {
+      setEditingCatId(null)
+      setEditingCatName("")
+      // Le renommage se répercute sur les applications → on recharge les deux.
+      await Promise.all([loadCategories(), refreshApps()])
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setCategoryError(data.error || "Erreur lors du renommage")
+    }
+  }
+
+  const handleDeleteCategory = async (cat: Category) => {
+    if (!confirm(`Supprimer la catégorie « ${cat.name} » ? Les applications qui la portent repasseront « sans catégorie ».`)) return
+    setCategoryError("")
+    const res = await fetch(`/api/admin/categories/${cat.id}`, { method: "DELETE" })
+    if (res.ok) {
+      await Promise.all([loadCategories(), refreshApps()])
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setCategoryError(data.error || "Erreur lors de la suppression")
+    }
   }
 
   const handleImportCsv = async (
@@ -1142,6 +1211,69 @@ export default function AdminPage() {
 
           {/* Applications Tab */}
           <TabsContent value="applications" className="space-y-6">
+            {/* Modération des catégories : ajout / renommage / suppression */}
+            <Card className="bg-surface border border-line shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)]">
+              <CardHeader>
+                <CardTitle className="text-ink">Catégories d'applications</CardTitle>
+                <p className="text-sm text-ink-muted">
+                  Gérez la liste des catégories (ex. Ressources Humaines, Production…). Elles sont proposées
+                  lors de la création/modification d'une application et s'affichent sur sa carte.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddCategory() } }}
+                    placeholder="Nouvelle catégorie…"
+                    className="max-w-xs bg-surface border-line text-ink"
+                  />
+                  <Button onClick={handleAddCategory} className="bg-brand hover:bg-brand-hover text-white">
+                    <Plus className="w-4 h-4 mr-2" /> Ajouter
+                  </Button>
+                </div>
+                {categoryError ? <p className="text-sm text-red-600">{categoryError}</p> : null}
+                {categories.length === 0 ? (
+                  <p className="text-sm text-ink-muted">Aucune catégorie pour l'instant.</p>
+                ) : (
+                  <ul className="flex flex-wrap gap-2">
+                    {categories.map((cat) => (
+                      <li key={cat.id} className="flex items-center gap-1 rounded-full border border-line bg-app px-3 py-1">
+                        {editingCatId === cat.id ? (
+                          <>
+                            <Input
+                              value={editingCatName}
+                              onChange={(e) => setEditingCatName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") { e.preventDefault(); handleRenameCategory(cat.id) }
+                                if (e.key === "Escape") { setEditingCatId(null); setEditingCatName("") }
+                              }}
+                              autoFocus
+                              className="h-7 w-40 bg-surface border-line text-ink text-sm"
+                            />
+                            <button type="button" title="Enregistrer" onClick={() => handleRenameCategory(cat.id)}
+                              className="text-green-600 hover:text-green-700 text-sm font-medium px-1">OK</button>
+                            <button type="button" title="Annuler" onClick={() => { setEditingCatId(null); setEditingCatName("") }}
+                              className="text-ink-muted hover:text-ink px-1"><X className="w-3.5 h-3.5" /></button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-sm text-ink">{cat.name}</span>
+                            <button type="button" title="Renommer"
+                              onClick={() => { setEditingCatId(cat.id); setEditingCatName(cat.name); setCategoryError("") }}
+                              className="text-ink-muted hover:text-brand px-1"><Edit className="w-3.5 h-3.5" /></button>
+                            <button type="button" title="Supprimer" onClick={() => handleDeleteCategory(cat)}
+                              className="text-ink-muted hover:text-red-600 px-1"><Trash2 className="w-3.5 h-3.5" /></button>
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+
             <Card className="bg-surface border border-line shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)]">
               <CardHeader>
                 <div className="flex flex-wrap justify-between items-center gap-2">
@@ -1172,7 +1304,7 @@ export default function AdminPage() {
                         <DialogHeader>
                           <DialogTitle className="text-ink">Créer une nouvelle application</DialogTitle>
                         </DialogHeader>
-                        <ApplicationForm onSubmit={handleCreateApp} />
+                        <ApplicationForm onSubmit={handleCreateApp} categories={categories} />
                       </DialogContent>
                     </Dialog>
                   </div>
@@ -1240,6 +1372,7 @@ export default function AdminPage() {
                               <ApplicationForm
                                 application={editingApp}
                                 onSubmit={(data) => editingApp && handleUpdateApp(editingApp.id, data)}
+                                categories={categories}
                               />
                             </DialogContent>
                           </Dialog>
@@ -2499,7 +2632,7 @@ function UserForm({ user, onSubmit }: { user?: User | null, onSubmit: (data: any
 }
 
 // Composant de formulaire pour les applications
-function ApplicationForm({ application, onSubmit }: { application?: Application | null, onSubmit: (data: any) => void }) {
+function ApplicationForm({ application, onSubmit, categories = [] }: { application?: Application | null, onSubmit: (data: any) => void, categories?: Category[] }) {
   const [formData, setFormData] = useState({
     nom: application?.nom || "",
     app_url: application?.app_url || "",
@@ -2609,23 +2742,23 @@ function ApplicationForm({ application, onSubmit }: { application?: Application 
       <div>
         <Label htmlFor="category" className="text-ink font-medium">
           Catégorie
-          <span className="text-ink-muted font-normal text-sm ml-1">(optionnel - ex. RH, Finance, Outils)</span>
+          <span className="text-ink-muted font-normal text-sm ml-1">(optionnel - gérée dans « Catégories d'applications »)</span>
         </Label>
-        <Input
+        <select
           id="category"
-          list="category-suggestions"
           value={formData.category}
           onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-          placeholder="Ex. RH, Finance, Outils…"
-          className="w-full px-3 py-2 border border-line rounded-md bg-surface text-ink placeholder-ink-faint focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-colors duration-200"
-        />
-        <datalist id="category-suggestions">
-          <option value="RH" />
-          <option value="Finance" />
-          <option value="Outils" />
-          <option value="Communication" />
-          <option value="Production" />
-        </datalist>
+          className="w-full px-3 py-2 border border-line rounded-md bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-colors duration-200"
+        >
+          <option value="">— Aucune —</option>
+          {/* Catégorie déjà affectée mais absente de la liste (ex. import) : on la garde disponible. */}
+          {formData.category && !categories.some((c) => c.name === formData.category) ? (
+            <option value={formData.category}>{formData.category}</option>
+          ) : null}
+          {categories.map((c) => (
+            <option key={c.id} value={c.name}>{c.name}</option>
+          ))}
+        </select>
       </div>
       <div>
         <Label htmlFor="image_url" className="text-ink font-medium">
