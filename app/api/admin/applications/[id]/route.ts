@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth"
 import { promises as fs } from "fs"
 import path from "path"
 import { logApplicationAction, logError } from "@/lib/logger"
+import { deleteAllForApp } from "@/lib/app-code-store"
 
 const DATA_FILE = path.join(process.cwd(), "data", "applications.json")
 
@@ -96,6 +97,8 @@ export async function DELETE(
 
     const filtered = applications.filter(a => a.id !== appId)
     await writeApplications(filtered)
+    // Nettoyage des dépôts de code associés à cette application
+    await deleteAllForApp(appId)
     await logApplicationAction(
       "Suppression application",
       app.id,

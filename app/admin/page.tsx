@@ -1354,6 +1354,7 @@ export default function AdminPage() {
                           Ouvrir l'app
                         </a>
                         <div className="flex items-center space-x-2">
+                          <AppCodeManager appId={app.id} appName={app.nom} />
                           <Dialog open={editAppDialogOpen} onOpenChange={setEditAppDialogOpen}>
                             <DialogTrigger asChild>
                               <Button
@@ -2628,6 +2629,207 @@ function UserForm({ user, onSubmit }: { user?: User | null, onSubmit: (data: any
         {user ? "Mettre à jour" : "Créer"}
       </Button>
     </form>
+  )
+}
+
+// Gestion des dépôts de code d'une application : chargement d'un dossier
+// (via sélecteur de dossier) ou d'une archive .zip, avec note, et possibilité
+// d'ajouter d'autres dépôts plus tard. Réservé aux administrateurs.
+function AppCodeManager({ appId, appName }: { appId: number; appName: string }) {
+  const [open, setOpen] = useState(false)
+  const [deposits, setDeposits] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [selected, setSelected] = useState<File[]>([])
+  const [kind, setKind] = useState<"folder" | "zip">("folder")
+  const [note, setNote] = useState("")
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState("")
+  const folderInputRef = useRef<HTMLInputElement>(null)
+  const zipInputRef = useRef<HTMLInputElement>(null)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/admin/applications/${appId}/code`)
+      if (res.ok) setDeposits(await res.json())
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (open) load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  const totalSize = (files: File[]) => files.reduce((s, f) => s + f.size, 0)
+  const fmtSize = (bytes: number) =>
+    bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} Mo` : `${Math.max(1, Math.round(bytes / 1024))} Ko`
+
+  const onPickFolder = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    setError("")
+    setKind("folder")
+    setSelected(files)
+  }
+  const onPickZip = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    setError("")
+    setKind("zip")
+    setSelected(files)
+  }
+
+  const resetSelection = () => {
+    setSelected([])
+    setNote("")
+    if (folderInputRef.current) folderInputRef.current.value = ""
+    if (zipInputRef.current) zipInputRef.current.value = ""
+  }
+
+  const upload = async () => {
+    setError("")
+    if (selected.length === 0) {
+      setError("Choisissez un dossier ou une archive .zip.")
+      return
+    }
+    if (totalSize(selected) > 50 * 1024 * 1024) {
+      setError("Trop volumineux (max 50 Mo au total).")
+      return
+    }
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append("note", note)
+      fd.append("kind", kind)
+      const paths = selected.map((f) => (f as any).webkitRelativePath || f.name)
+      fd.append("paths", JSON.stringify(paths))
+      for (const f of selected) fd.append("files", f)
+      const res = await fetch(`/api/admin/applications/${appId}/code`, { method: "POST", body: fd })
+      if (res.ok) {
+        resetSelection()
+        await load()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error || "Erreur lors du chargement.")
+      }
+    } catch {
+      setError("Erreur réseau lors du chargement.")
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const remove = async (depositId: string) => {
+    if (!confirm("Supprimer ce dépôt de code ?")) return
+    const res = await fetch(`/api/admin/applications/${appId}/code/${depositId}`, { method: "DELETE" })
+    if (res.ok) await load()
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="border-line text-ink hover:bg-app" title="Dossiers de code">
+          <Layers className="w-4 h-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="bg-surface max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-ink">Dossiers de code — {appName}</DialogTitle>
+        </DialogHeader>
+
+        {/* Formulaire de chargement */}
+        <div className="space-y-3 border border-line rounded-lg p-3">
+          <p className="text-sm font-medium text-ink">Ajouter un dépôt</p>
+          <div className="flex flex-wrap gap-2">
+            <input
+              ref={folderInputRef}
+              type="file"
+              className="hidden"
+              onChange={onPickFolder}
+              {...({ webkitdirectory: "", directory: "", mozdirectory: "" } as any)}
+            />
+            <input ref={zipInputRef} type="file" accept=".zip,application/zip" className="hidden" onChange={onPickZip} />
+            <Button type="button" variant="outline" className="border-line text-ink hover:bg-app"
+              onClick={() => folderInputRef.current?.click()}>
+              <Upload className="w-4 h-4 mr-2" /> Choisir un dossier
+            </Button>
+            <Button type="button" variant="outline" className="border-line text-ink hover:bg-app"
+              onClick={() => zipInputRef.current?.click()}>
+              <Upload className="w-4 h-4 mr-2" /> Choisir un .zip
+            </Button>
+          </div>
+
+          {selected.length > 0 ? (
+            <p className="text-xs text-ink-muted">
+              {kind === "zip" ? "Archive" : "Dossier"} sélectionné : {selected.length} fichier(s) — {fmtSize(totalSize(selected))}
+              <button type="button" onClick={resetSelection} className="ml-2 text-ink-muted hover:text-red-600 underline">retirer</button>
+            </p>
+          ) : (
+            <p className="text-xs text-ink-faint">Un dossier normal ou une archive .zip (max 50 Mo).</p>
+          )}
+
+          <div>
+            <Label htmlFor={`note-${appId}`} className="text-ink text-sm">Note (optionnel)</Label>
+            <textarea
+              id={`note-${appId}`}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              placeholder="Ex. version 1.2, remis par le prestataire…"
+              className="w-full mt-1 px-3 py-2 border border-line rounded-md bg-surface text-ink placeholder-ink-faint text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+            />
+          </div>
+
+          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+          <Button onClick={upload} disabled={uploading || selected.length === 0}
+            className="bg-brand hover:bg-brand-hover text-white">
+            {uploading ? "Chargement…" : "Charger le dépôt"}
+          </Button>
+        </div>
+
+        {/* Liste des dépôts existants */}
+        <div className="space-y-2">
+          <p className="text-sm font-medium text-ink">Dépôts existants</p>
+          {loading ? (
+            <p className="text-sm text-ink-muted">Chargement…</p>
+          ) : deposits.length === 0 ? (
+            <p className="text-sm text-ink-muted">Aucun dépôt pour l'instant.</p>
+          ) : (
+            <ul className="space-y-2">
+              {deposits.map((d) => (
+                <li key={d.id} className="border border-line rounded-md p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm text-ink">
+                        {d.files?.length || 0} fichier(s) — {fmtSize(d.total_size || 0)}
+                        <span className="text-ink-faint"> · {d.kind === "zip" ? "archive" : "dossier"}</span>
+                      </p>
+                      <p className="text-xs text-ink-muted">
+                        {new Date(d.created_at).toLocaleString("fr-FR")} · {d.created_by}
+                      </p>
+                      {d.note ? <p className="text-sm text-ink mt-1 whitespace-pre-wrap break-words">{d.note}</p> : null}
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <a
+                        href={`/api/admin/applications/${appId}/code/${d.id}/download`}
+                        className="p-1.5 text-ink-muted hover:text-brand"
+                        title="Télécharger (.zip)"
+                      >
+                        <Download className="w-4 h-4" />
+                      </a>
+                      <button type="button" onClick={() => remove(d.id)} className="p-1.5 text-ink-muted hover:text-red-600" title="Supprimer">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
