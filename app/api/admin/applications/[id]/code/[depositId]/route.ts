@@ -1,14 +1,21 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth"
+import { requireAdmin, verifyCurrentUserPassword } from "@/lib/auth"
 import { deleteDeposit } from "@/lib/app-code-store"
 import { logApplicationAction } from "@/lib/logger"
 
-// DELETE → supprime un dépôt de code (admin)
-export async function DELETE(_request: NextRequest, { params }: { params: { id: string; depositId: string } }) {
+// DELETE → supprime un dépôt de code (admin).
+// Exige une reconfirmation du mot de passe de l'administrateur connecté.
+export async function DELETE(request: NextRequest, { params }: { params: { id: string; depositId: string } }) {
   try {
     const admin = await requireAdmin()
     const appId = parseInt(params.id)
     if (Number.isNaN(appId)) return NextResponse.json({ error: "Application invalide" }, { status: 400 })
+
+    const body = await request.json().catch(() => ({}))
+    if (!(await verifyCurrentUserPassword(body?.password))) {
+      return NextResponse.json({ error: "Mot de passe incorrect" }, { status: 401 })
+    }
+
     const ok = await deleteDeposit(appId, params.depositId)
     if (!ok) return NextResponse.json({ error: "Dépôt introuvable" }, { status: 404 })
     await logApplicationAction("Suppression code application", appId, "", admin.id, admin.nom, `Dépôt de code supprimé (${params.depositId})`)

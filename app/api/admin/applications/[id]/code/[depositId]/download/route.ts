@@ -1,16 +1,23 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth"
+import { requireAdmin, verifyCurrentUserPassword } from "@/lib/auth"
 import { getDeposit, readDepositFiles } from "@/lib/app-code-store"
 import { createZip } from "@/lib/zip-writer"
 import { logApplicationAction } from "@/lib/logger"
 
-// GET → télécharge le dépôt sous forme d'archive .zip (admin).
-// Si le dépôt est déjà une unique archive .zip, elle est renvoyée telle quelle.
-export async function GET(_request: NextRequest, { params }: { params: { id: string; depositId: string } }) {
+// POST → télécharge le dépôt sous forme d'archive .zip (admin).
+// Exige une reconfirmation du mot de passe de l'administrateur connecté
+// (envoyé dans le corps de la requête). Si le dépôt est déjà une unique
+// archive .zip, elle est renvoyée telle quelle.
+export async function POST(request: NextRequest, { params }: { params: { id: string; depositId: string } }) {
   try {
     const admin = await requireAdmin()
     const appId = parseInt(params.id)
     if (Number.isNaN(appId)) return NextResponse.json({ error: "Application invalide" }, { status: 400 })
+
+    const reqBody = await request.json().catch(() => ({}))
+    if (!(await verifyCurrentUserPassword(reqBody?.password))) {
+      return NextResponse.json({ error: "Mot de passe incorrect" }, { status: 401 })
+    }
 
     const deposit = await getDeposit(appId, params.depositId)
     if (!deposit) return NextResponse.json({ error: "Dépôt introuvable" }, { status: 404 })

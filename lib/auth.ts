@@ -2,7 +2,9 @@ import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
+import bcrypt from "bcryptjs"
 import { verifySession, signSession, SESSION_COOKIE_NAME, SESSION_MAX_AGE } from "@/lib/session"
+import { findUserByEmail } from "@/lib/user-store"
 
 /**
  * Si l'erreur provient de requireAuth/requireAdmin, renvoie la réponse HTTP
@@ -106,6 +108,21 @@ export async function requireAdmin(): Promise<User> {
     throw new Error("Admin access required")
   }
   return user
+}
+
+/**
+ * Revérifie le mot de passe de l'utilisateur actuellement connecté.
+ * Sert à confirmer l'identité avant une action sensible (ex. téléchargement
+ * ou suppression d'un dépôt de code). Renvoie true seulement si le mot de
+ * passe correspond bien au compte de la session en cours.
+ */
+export async function verifyCurrentUserPassword(password: string): Promise<boolean> {
+  if (typeof password !== "string" || password.length === 0) return false
+  const current = await getCurrentUser()
+  if (!current) return false
+  const stored = await findUserByEmail(current.email)
+  if (!stored?.mot_de_passe) return false
+  return bcrypt.compare(password, stored.mot_de_passe)
 }
 
 /**

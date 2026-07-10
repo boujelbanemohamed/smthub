@@ -2647,6 +2647,12 @@ function AppCodeManager({ appId, appName }: { appId: number; appName: string }) 
   const folderInputRef = useRef<HTMLInputElement>(null)
   const zipInputRef = useRef<HTMLInputElement>(null)
 
+  // Reconfirmation du mot de passe avant téléchargement / suppression
+  const [pwPrompt, setPwPrompt] = useState<{ action: "download" | "delete"; depositId: string } | null>(null)
+  const [pwValue, setPwValue] = useState("")
+  const [pwError, setPwError] = useState("")
+  const [pwBusy, setPwBusy] = useState(false)
+
   const load = async () => {
     setLoading(true)
     try {
@@ -2719,10 +2725,64 @@ function AppCodeManager({ appId, appName }: { appId: number; appName: string }) 
     }
   }
 
-  const remove = async (depositId: string) => {
-    if (!confirm("Supprimer ce dépôt de code ?")) return
-    const res = await fetch(`/api/admin/applications/${appId}/code/${depositId}`, { method: "DELETE" })
-    if (res.ok) await load()
+  // Ouvre la fenêtre de reconfirmation du mot de passe pour l'action demandée.
+  const askPassword = (action: "download" | "delete", depositId: string) => {
+    setPwValue("")
+    setPwError("")
+    setPwPrompt({ action, depositId })
+  }
+
+  const confirmPassword = async () => {
+    if (!pwPrompt) return
+    if (!pwValue) { setPwError("Saisissez votre mot de passe."); return }
+    setPwBusy(true)
+    setPwError("")
+    try {
+      const { action, depositId } = pwPrompt
+      if (action === "delete") {
+        const res = await fetch(`/api/admin/applications/${appId}/code/${depositId}`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: pwValue }),
+        })
+        if (res.ok) {
+          setPwPrompt(null)
+          await load()
+        } else {
+          const data = await res.json().catch(() => ({}))
+          setPwError(data.error || "Échec de la suppression.")
+        }
+      } else {
+        const res = await fetch(`/api/admin/applications/${appId}/code/${depositId}/download`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: pwValue }),
+        })
+        if (res.ok) {
+          const blob = await res.blob()
+          // Récupère le nom de fichier depuis l'en-tête Content-Disposition
+          const cd = res.headers.get("Content-Disposition") || ""
+          const m = cd.match(/filename="?([^"]+)"?/)
+          const filename = m ? m[1] : `code-app${appId}.zip`
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement("a")
+          a.href = url
+          a.download = filename
+          document.body.appendChild(a)
+          a.click()
+          a.remove()
+          URL.revokeObjectURL(url)
+          setPwPrompt(null)
+        } else {
+          const data = await res.json().catch(() => ({}))
+          setPwError(data.error || "Échec du téléchargement.")
+        }
+      }
+    } catch {
+      setPwError("Erreur réseau.")
+    } finally {
+      setPwBusy(false)
+    }
   }
 
   return (
@@ -2811,14 +2871,15 @@ function AppCodeManager({ appId, appName }: { appId: number; appName: string }) 
                       {d.note ? <p className="text-sm text-ink mt-1 whitespace-pre-wrap break-words">{d.note}</p> : null}
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <a
-                        href={`/api/admin/applications/${appId}/code/${d.id}/download`}
+                      <button
+                        type="button"
+                        onClick={() => askPassword("download", d.id)}
                         className="p-1.5 text-ink-muted hover:text-brand"
                         title="Télécharger (.zip)"
                       >
                         <Download className="w-4 h-4" />
-                      </a>
-                      <button type="button" onClick={() => remove(d.id)} className="p-1.5 text-ink-muted hover:text-red-600" title="Supprimer">
+                      </button>
+                      <button type="button" onClick={() => askPassword("delete", d.id)} className="p-1.5 text-ink-muted hover:text-red-600" title="Supprimer">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -2828,6 +2889,41 @@ function AppCodeManager({ appId, appName }: { appId: number; appName: string }) 
             </ul>
           )}
         </div>
+
+        {/* Reconfirmation du mot de passe avant téléchargement / suppression */}
+        {pwPrompt ? (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 p-4 rounded-lg">
+            <div className="w-full max-w-sm rounded-lg bg-surface border border-line shadow-xl p-5">
+              <h3 className="text-base font-semibold text-ink mb-1">Confirmer votre identité</h3>
+              <p className="text-sm text-ink-muted mb-3">
+                Saisissez votre mot de passe pour {pwPrompt.action === "delete" ? "supprimer" : "télécharger"} ce dépôt.
+              </p>
+              <Input
+                type="password"
+                value={pwValue}
+                autoFocus
+                onChange={(e) => setPwValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confirmPassword() } }}
+                placeholder="Mot de passe"
+                className="bg-surface border-line text-ink"
+              />
+              {pwError ? <p className="text-sm text-red-600 mt-2">{pwError}</p> : null}
+              <div className="flex justify-end gap-2 mt-4">
+                <Button variant="outline" className="border-line text-ink hover:bg-app"
+                  onClick={() => { setPwPrompt(null); setPwValue(""); setPwError("") }} disabled={pwBusy}>
+                  Annuler
+                </Button>
+                <Button
+                  onClick={confirmPassword}
+                  disabled={pwBusy}
+                  className={pwPrompt.action === "delete" ? "bg-red-600 hover:bg-red-700 text-white" : "bg-brand hover:bg-brand-hover text-white"}
+                >
+                  {pwBusy ? "Vérification…" : pwPrompt.action === "delete" ? "Supprimer" : "Télécharger"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </DialogContent>
     </Dialog>
   )
