@@ -12,7 +12,9 @@
     "prisma:push": "prisma db push",
     "migrate:json": "node scripts/migrate-to-database.js",
     "seed:admin": "node scripts/seed-admin.mjs",
-    "reset:password": "node scripts/reset-password.mjs"
+    "reset:password": "node scripts/reset-password.mjs",
+    "backup": "bash scripts/backup.sh",
+    "restore": "bash scripts/restore.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
