@@ -1,5 +1,19 @@
 # Sauvegarde & restauration — SMT HUB
 
+> 💡 **Deux façons de sauvegarder :**
+> 1. **Depuis l'admin** (onglet « Sauvegardes ») — recommandé : créer/lister/
+>    télécharger/supprimer/**restaurer** une sauvegarde, et **planifier** la
+>    sauvegarde automatique (fréquence, heure, rétention). Le planificateur est
+>    intégré à l'application : **aucun cron système n'est nécessaire** si vous
+>    l'utilisez.
+> 2. **En ligne de commande** (ci-dessous) — utile pour un cron système
+>    classique ou une restauration en SSH. Le dossier est le même (`<projet>/
+>    backups`), donc les deux méthodes voient les mêmes archives.
+>
+> N'activez qu'**une seule** des deux planifications (UI *ou* cron système) pour
+> éviter les doubles sauvegardes.
+
+
 Le dossier `data/` **est** la base de données de l'application (utilisateurs,
 applications, coffre-fort chiffré, dépôts de code, annonces, logs). Il doit être
 sauvegardé régulièrement. Le fichier de secrets `.env.production` est inclus dans

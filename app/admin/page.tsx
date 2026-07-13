@@ -1038,7 +1038,7 @@ export default function AdminPage() {
 
         {/* Management Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                      <TabsList className="flex flex-wrap justify-start h-auto w-full gap-1 bg-surface border border-line rounded-lg p-1">
+                      <TabsList className="flex flex-wrap justify-center h-auto w-full gap-1 bg-surface border border-line rounded-lg p-1">
               <TabsTrigger
                 value="users"
                 className="data-[state=active]:bg-brand data-[state=active]:text-white text-ink font-medium"
@@ -2948,9 +2948,15 @@ function BackupsPanel() {
   const [backups, setBackups] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [notice, setNotice] = useState("")
+
+  // Configuration de la planification automatique
+  const [cfg, setCfg] = useState<any>(null)
+  const [cfgSaving, setCfgSaving] = useState(false)
+  const [cfgSaved, setCfgSaved] = useState(false)
 
   // Reconfirmation du mot de passe : action en attente
-  const [pw, setPw] = useState<{ action: "create" | "download" | "delete"; name?: string } | null>(null)
+  const [pw, setPw] = useState<{ action: "create" | "download" | "delete" | "restore"; name?: string } | null>(null)
   const [pwValue, setPwValue] = useState("")
   const [pwError, setPwError] = useState("")
   const [pwBusy, setPwBusy] = useState(false)
@@ -2959,9 +2965,10 @@ function BackupsPanel() {
     setLoading(true)
     setError("")
     try {
-      const res = await fetch("/api/admin/backups")
-      if (res.ok) setBackups(await res.json())
+      const [rb, rc] = await Promise.all([fetch("/api/admin/backups"), fetch("/api/admin/backups/config")])
+      if (rb.ok) setBackups(await rb.json())
       else setError("Impossible de charger les sauvegardes.")
+      if (rc.ok) setCfg(await rc.json())
     } finally {
       setLoading(false)
     }
@@ -2972,9 +2979,28 @@ function BackupsPanel() {
   const fmtSize = (b: number) =>
     b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} Mo` : `${Math.max(1, Math.round(b / 1024))} Ko`
 
-  const ask = (action: "create" | "download" | "delete", name?: string) => {
+  const WEEKDAYS = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"]
+
+  const saveConfig = async () => {
+    if (!cfg) return
+    setCfgSaving(true)
+    setCfgSaved(false)
+    try {
+      const res = await fetch("/api/admin/backups/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cfg),
+      })
+      if (res.ok) { setCfg(await res.json()); setCfgSaved(true); setTimeout(() => setCfgSaved(false), 2500) }
+    } finally {
+      setCfgSaving(false)
+    }
+  }
+
+  const ask = (action: "create" | "download" | "delete" | "restore", name?: string) => {
     setPwValue("")
     setPwError("")
+    setNotice("")
     setPw({ action, name })
   }
 
@@ -2986,38 +3012,47 @@ function BackupsPanel() {
     try {
       if (pw.action === "create") {
         const res = await fetch("/api/admin/backups", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ password: pwValue }),
         })
         if (res.ok) { setPw(null); await load() }
         else { const d = await res.json().catch(() => ({})); setPwError(d.error || "Échec de la création.") }
       } else if (pw.action === "delete" && pw.name) {
         const res = await fetch(`/api/admin/backups/${encodeURIComponent(pw.name)}`, {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
+          method: "DELETE", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ password: pwValue }),
         })
         if (res.ok) { setPw(null); await load() }
         else { const d = await res.json().catch(() => ({})); setPwError(d.error || "Échec de la suppression.") }
       } else if (pw.action === "download" && pw.name) {
         const res = await fetch(`/api/admin/backups/${encodeURIComponent(pw.name)}/download`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+          method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ password: pwValue }),
         })
         if (res.ok) {
           const blob = await res.blob()
           const url = URL.createObjectURL(blob)
           const a = document.createElement("a")
-          a.href = url
-          a.download = pw.name
-          document.body.appendChild(a)
-          a.click()
-          a.remove()
+          a.href = url; a.download = pw.name
+          document.body.appendChild(a); a.click(); a.remove()
           URL.revokeObjectURL(url)
           setPw(null)
         } else { const d = await res.json().catch(() => ({})); setPwError(d.error || "Échec du téléchargement.") }
+      } else if (pw.action === "restore" && pw.name) {
+        const res = await fetch(`/api/admin/backups/${encodeURIComponent(pw.name)}/restore`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: pwValue }),
+        })
+        if (res.ok) {
+          const d = await res.json().catch(() => ({}))
+          setPw(null)
+          setNotice(
+            "Restauration effectuée." +
+            (d.safety ? ` Vos données précédentes ont été conservées dans « ${d.safety} » (sur le serveur).` : "") +
+            " Reconnectez-vous si nécessaire."
+          )
+          await load()
+        } else { const d = await res.json().catch(() => ({})); setPwError(d.error || "Échec de la restauration.") }
       }
     } catch {
       setPwError("Erreur réseau.")
@@ -3026,91 +3061,171 @@ function BackupsPanel() {
     }
   }
 
-  return (
-    <Card className="relative bg-surface border border-line shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)]">
-      <CardHeader>
-        <div className="flex flex-wrap justify-between items-center gap-2">
-          <div>
-            <CardTitle className="text-ink">Sauvegardes</CardTitle>
-            <p className="text-sm text-ink-muted">
-              Archive complète des données (utilisateurs, applications, coffre-fort, dépôts de code, annonces…) et des secrets.
-              Les sauvegardes automatiques du cron apparaissent aussi ici.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" className="border-line text-ink hover:bg-app" onClick={load} title="Rafraîchir">
-              <RotateCcw className="w-4 h-4" />
-            </Button>
-            <Button className="bg-brand hover:bg-brand-hover text-white" onClick={() => ask("create")}>
-              <Save className="w-4 h-4 mr-2" /> Sauvegarder maintenant
-            </Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {error ? <p className="text-sm text-red-600 mb-3">{error}</p> : null}
-        {loading ? (
-          <p className="text-sm text-ink-muted">Chargement…</p>
-        ) : backups.length === 0 ? (
-          <p className="text-sm text-ink-muted">Aucune sauvegarde pour l'instant. Cliquez sur « Sauvegarder maintenant ».</p>
-        ) : (
-          <ul className="space-y-2">
-            {backups.map((b) => (
-              <li key={b.name} className="flex items-center justify-between gap-2 border border-line rounded-md p-3">
-                <div className="min-w-0">
-                  <p className="text-sm text-ink font-medium truncate">{b.name}</p>
-                  <p className="text-xs text-ink-muted">
-                    {new Date(b.created_at).toLocaleString("fr-FR")} · {fmtSize(b.size)}
-                    <span className="text-ink-faint"> · {b.kind === "tar.gz" ? "auto (cron)" : "manuelle"}</span>
-                  </p>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button type="button" onClick={() => ask("download", b.name)} className="p-1.5 text-ink-muted hover:text-brand" title="Télécharger">
-                    <Download className="w-4 h-4" />
-                  </button>
-                  <button type="button" onClick={() => ask("delete", b.name)} className="p-1.5 text-ink-muted hover:text-red-600" title="Supprimer">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
+  const pwLabel = (a: string) =>
+    a === "create" ? "créer une sauvegarde"
+      : a === "delete" ? "supprimer cette sauvegarde"
+      : a === "restore" ? "RESTAURER cette sauvegarde (remplace les données actuelles)"
+      : "télécharger cette sauvegarde"
 
-      {/* Reconfirmation du mot de passe */}
-      {pw ? (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 p-4 rounded-lg">
-          <div className="w-full max-w-sm rounded-lg bg-surface border border-line shadow-xl p-5">
-            <h3 className="text-base font-semibold text-ink mb-1">Confirmer votre identité</h3>
-            <p className="text-sm text-ink-muted mb-3">
-              Saisissez votre mot de passe pour{" "}
-              {pw.action === "create" ? "créer une sauvegarde" : pw.action === "delete" ? "supprimer cette sauvegarde" : "télécharger cette sauvegarde"}.
-            </p>
-            <Input
-              type="password"
-              value={pwValue}
-              autoFocus
-              onChange={(e) => setPwValue(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confirmPw() } }}
-              placeholder="Mot de passe"
-              className="bg-surface border-line text-ink"
-            />
-            {pwError ? <p className="text-sm text-red-600 mt-2">{pwError}</p> : null}
-            <div className="flex justify-end gap-2 mt-4">
-              <Button variant="outline" className="border-line text-ink hover:bg-app"
-                onClick={() => { setPw(null); setPwValue(""); setPwError("") }} disabled={pwBusy}>
-                Annuler
+  return (
+    <div className="space-y-6">
+      {/* Planification automatique */}
+      <Card className="bg-surface border border-line shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)]">
+        <CardHeader>
+          <CardTitle className="text-ink">Sauvegarde automatique</CardTitle>
+          <p className="text-sm text-ink-muted">
+            L'application effectue elle-même les sauvegardes selon cette planification (aucun cron système requis).
+          </p>
+        </CardHeader>
+        <CardContent>
+          {!cfg ? (
+            <p className="text-sm text-ink-muted">Chargement…</p>
+          ) : (
+            <div className="space-y-4">
+              <label className="flex items-center gap-2 text-sm text-ink">
+                <input type="checkbox" checked={!!cfg.enabled}
+                  onChange={(e) => setCfg({ ...cfg, enabled: e.target.checked })}
+                  className="h-4 w-4 accent-[var(--brand,#1877f2)]" />
+                Activer la sauvegarde automatique
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div>
+                  <Label className="text-ink text-sm">Fréquence</Label>
+                  <select value={cfg.frequency} onChange={(e) => setCfg({ ...cfg, frequency: e.target.value })}
+                    className="w-full mt-1 px-3 py-2 border border-line rounded-md bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                    <option value="daily">Quotidienne</option>
+                    <option value="weekly">Hebdomadaire</option>
+                  </select>
+                </div>
+                {cfg.frequency === "weekly" ? (
+                  <div>
+                    <Label className="text-ink text-sm">Jour</Label>
+                    <select value={cfg.weekday} onChange={(e) => setCfg({ ...cfg, weekday: Number(e.target.value) })}
+                      className="w-full mt-1 px-3 py-2 border border-line rounded-md bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                      {WEEKDAYS.map((w, i) => <option key={i} value={i}>{w}</option>)}
+                    </select>
+                  </div>
+                ) : null}
+                <div>
+                  <Label className="text-ink text-sm">Heure</Label>
+                  <select value={cfg.hour} onChange={(e) => setCfg({ ...cfg, hour: Number(e.target.value) })}
+                    className="w-full mt-1 px-3 py-2 border border-line rounded-md bg-surface text-ink text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                    {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-ink text-sm">Rétention (jours)</Label>
+                  <Input type="number" min={1} max={365} value={cfg.retentionDays}
+                    onChange={(e) => setCfg({ ...cfg, retentionDays: Number(e.target.value) })}
+                    className="mt-1 bg-surface border-line text-ink" />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button onClick={saveConfig} disabled={cfgSaving} className="bg-brand hover:bg-brand-hover text-white">
+                  {cfgSaving ? "Enregistrement…" : "Enregistrer la planification"}
+                </Button>
+                {cfgSaved ? <span className="text-sm text-green-600">✓ Enregistré</span> : null}
+                {cfg.lastRun ? (
+                  <span className="text-xs text-ink-muted">Dernière auto : {new Date(cfg.lastRun).toLocaleString("fr-FR")}</span>
+                ) : null}
+              </div>
+              <p className="text-xs text-ink-faint">
+                Les anciennes sauvegardes au-delà de la rétention sont supprimées automatiquement. L'heure est celle du serveur.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Liste + actions */}
+      <Card className="relative bg-surface border border-line shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)]">
+        <CardHeader>
+          <div className="flex flex-col items-center text-center gap-3">
+            <div>
+              <CardTitle className="text-ink">Sauvegardes</CardTitle>
+              <p className="text-sm text-ink-muted">
+                Archive complète des données (utilisateurs, applications, coffre-fort, dépôts de code, annonces…) et des secrets.
+                Les sauvegardes automatiques apparaissent aussi ici.
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-2">
+              <Button variant="outline" className="border-line text-ink hover:bg-app" onClick={load} title="Rafraîchir">
+                <RotateCcw className="w-4 h-4" />
               </Button>
-              <Button onClick={confirmPw} disabled={pwBusy}
-                className={pw.action === "delete" ? "bg-red-600 hover:bg-red-700 text-white" : "bg-brand hover:bg-brand-hover text-white"}>
-                {pwBusy ? "Vérification…" : pw.action === "create" ? "Sauvegarder" : pw.action === "delete" ? "Supprimer" : "Télécharger"}
+              <Button className="bg-brand hover:bg-brand-hover text-white" onClick={() => ask("create")}>
+                <Save className="w-4 h-4 mr-2" /> Sauvegarder maintenant
               </Button>
             </div>
           </div>
-        </div>
-      ) : null}
-    </Card>
+        </CardHeader>
+        <CardContent>
+          {notice ? <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md p-2 mb-3">{notice}</p> : null}
+          {error ? <p className="text-sm text-red-600 mb-3">{error}</p> : null}
+          {loading ? (
+            <p className="text-sm text-ink-muted">Chargement…</p>
+          ) : backups.length === 0 ? (
+            <p className="text-sm text-ink-muted">Aucune sauvegarde pour l'instant. Cliquez sur « Sauvegarder maintenant ».</p>
+          ) : (
+            <ul className="space-y-2">
+              {backups.map((b) => (
+                <li key={b.name} className="flex items-center justify-between gap-2 border border-line rounded-md p-3">
+                  <div className="min-w-0">
+                    <p className="text-sm text-ink font-medium truncate">{b.name}</p>
+                    <p className="text-xs text-ink-muted">
+                      {new Date(b.created_at).toLocaleString("fr-FR")} · {fmtSize(b.size)}
+                      <span className="text-ink-faint"> · {b.kind === "tar.gz" ? "auto" : "manuelle"}</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button type="button" onClick={() => ask("restore", b.name)} className="p-1.5 text-ink-muted hover:text-amber-600" title="Restaurer">
+                      <RotateCcw className="w-4 h-4" />
+                    </button>
+                    <button type="button" onClick={() => ask("download", b.name)} className="p-1.5 text-ink-muted hover:text-brand" title="Télécharger">
+                      <Download className="w-4 h-4" />
+                    </button>
+                    <button type="button" onClick={() => ask("delete", b.name)} className="p-1.5 text-ink-muted hover:text-red-600" title="Supprimer">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+
+        {/* Reconfirmation du mot de passe */}
+        {pw ? (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 p-4 rounded-lg">
+            <div className="w-full max-w-sm rounded-lg bg-surface border border-line shadow-xl p-5">
+              <h3 className="text-base font-semibold text-ink mb-1">Confirmer votre identité</h3>
+              {pw.action === "restore" ? (
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2 mb-3">
+                  ⚠️ La restauration <strong>remplace les données actuelles</strong>. Vos données présentes seront d'abord copiées par sécurité, puis remplacées.
+                </p>
+              ) : null}
+              <p className="text-sm text-ink-muted mb-3">Saisissez votre mot de passe pour {pwLabel(pw.action)}.</p>
+              <Input type="password" value={pwValue} autoFocus
+                onChange={(e) => setPwValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confirmPw() } }}
+                placeholder="Mot de passe" className="bg-surface border-line text-ink" />
+              {pwError ? <p className="text-sm text-red-600 mt-2">{pwError}</p> : null}
+              <div className="flex justify-end gap-2 mt-4">
+                <Button variant="outline" className="border-line text-ink hover:bg-app"
+                  onClick={() => { setPw(null); setPwValue(""); setPwError("") }} disabled={pwBusy}>
+                  Annuler
+                </Button>
+                <Button onClick={confirmPw} disabled={pwBusy}
+                  className={pw.action === "delete" || pw.action === "restore" ? "bg-red-600 hover:bg-red-700 text-white" : "bg-brand hover:bg-brand-hover text-white"}>
+                  {pwBusy ? "Vérification…" : pw.action === "create" ? "Sauvegarder" : pw.action === "delete" ? "Supprimer" : pw.action === "restore" ? "Restaurer" : "Télécharger"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </Card>
+    </div>
   )
 }
 

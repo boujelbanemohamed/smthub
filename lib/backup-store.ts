@@ -122,3 +122,17 @@ export async function deleteBackup(name: string): Promise<boolean> {
   await fs.rm(abs, { force: true })
   return true
 }
+
+// Supprime les archives plus vieilles que `days` jours. Renvoie le nombre
+// d'archives supprimées.
+export async function pruneOldBackups(days: number): Promise<number> {
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
+  const list = await listBackups()
+  let removed = 0
+  for (const b of list) {
+    if (new Date(b.created_at).getTime() < cutoff) {
+      if (await deleteBackup(b.name)) removed++
+    }
+  }
+  return removed
+}

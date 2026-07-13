@@ -25,6 +25,8 @@ yarn-error.log*
 
 # archives de sauvegarde (contiennent données + secrets — jamais dans git)
 /backups/
+# copies de sécurité créées lors d'une restauration
+/data.avant-restauration-*/
 
 # vercel
 .vercel
