@@ -1,6 +1,10 @@
 import { promises as fs } from "fs"
 import path from "path"
+import { execFile } from "child_process"
+import { promisify } from "util"
 import { createZip, type ZipEntry } from "@/lib/zip-writer"
+
+const run = promisify(execFile)
 
 // Dossier où sont stockées les archives de sauvegarde. Doit être IDENTIQUE à
 // celui utilisé par scripts/backup.sh (le cron) pour que l'admin voie aussi les
@@ -121,6 +125,45 @@ export async function deleteBackup(name: string): Promise<boolean> {
   if (!abs) return false
   await fs.rm(abs, { force: true })
   return true
+}
+
+// Restaure une archive (.zip ou .tar.gz) à la racine du projet. Par sécurité,
+// le dossier data/ actuel est d'abord DÉPLACÉ (jamais supprimé) vers
+// data.avant-restauration-<horodatage>. En cas d'échec d'extraction, on tente
+// de remettre les données d'origine. Renvoie le nom de la copie de sécurité.
+export async function restoreFromArchive(absArchive: string, isTar: boolean): Promise<{ safety: string | null }> {
+  const cwd = process.cwd()
+  const dataDir = path.join(cwd, "data")
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)
+
+  let safety: string | null = null
+  try {
+    await fs.access(dataDir)
+    safety = path.join(cwd, `data.avant-restauration-${ts}`)
+    await fs.rename(dataDir, safety)
+  } catch {
+    // pas de dossier data/ à préserver
+  }
+
+  try {
+    if (isTar) {
+      await run("tar", ["-xzf", absArchive, "-C", cwd])
+    } else {
+      await run("unzip", ["-o", absArchive, "-d", cwd])
+    }
+  } catch (extractErr) {
+    if (safety) {
+      try {
+        await fs.rm(dataDir, { recursive: true, force: true })
+        await fs.rename(safety, dataDir)
+      } catch {
+        // la copie de sécurité reste disponible sur le disque
+      }
+    }
+    throw extractErr
+  }
+
+  return { safety: safety ? path.basename(safety) : null }
 }
 
 // Supprime les archives plus vieilles que `days` jours. Renvoie le nombre

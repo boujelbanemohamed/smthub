@@ -2956,10 +2956,13 @@ function BackupsPanel() {
   const [cfgSaved, setCfgSaved] = useState(false)
 
   // Reconfirmation du mot de passe : action en attente
-  const [pw, setPw] = useState<{ action: "create" | "download" | "delete" | "restore"; name?: string } | null>(null)
+  const [pw, setPw] = useState<{ action: "create" | "download" | "delete" | "restore" | "restore-upload"; name?: string; fileName?: string } | null>(null)
   const [pwValue, setPwValue] = useState("")
   const [pwError, setPwError] = useState("")
   const [pwBusy, setPwBusy] = useState(false)
+  // Fichier choisi pour une restauration par import
+  const restoreFileRef = useRef<HTMLInputElement>(null)
+  const [restoreFile, setRestoreFile] = useState<File | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -3002,6 +3005,19 @@ function BackupsPanel() {
     setPwError("")
     setNotice("")
     setPw({ action, name })
+  }
+
+  // L'admin a choisi un fichier d'archive à restaurer → ouvre la confirmation.
+  const onPickRestoreFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] || null
+    if (f) {
+      setRestoreFile(f)
+      setPwValue("")
+      setPwError("")
+      setNotice("")
+      setPw({ action: "restore-upload", fileName: f.name })
+    }
+    if (restoreFileRef.current) restoreFileRef.current.value = ""
   }
 
   const confirmPw = async () => {
@@ -3053,6 +3069,22 @@ function BackupsPanel() {
           )
           await load()
         } else { const d = await res.json().catch(() => ({})); setPwError(d.error || "Échec de la restauration.") }
+      } else if (pw.action === "restore-upload" && restoreFile) {
+        const fd = new FormData()
+        fd.append("password", pwValue)
+        fd.append("file", restoreFile)
+        const res = await fetch("/api/admin/backups/restore-upload", { method: "POST", body: fd })
+        if (res.ok) {
+          const d = await res.json().catch(() => ({}))
+          setPw(null)
+          setRestoreFile(null)
+          setNotice(
+            "Restauration effectuée." +
+            (d.safety ? ` Vos données précédentes ont été conservées dans « ${d.safety} » (sur le serveur).` : "") +
+            " Reconnectez-vous si nécessaire."
+          )
+          await load()
+        } else { const d = await res.json().catch(() => ({})); setPwError(d.error || "Échec de la restauration.") }
       }
     } catch {
       setPwError("Erreur réseau.")
@@ -3065,6 +3097,7 @@ function BackupsPanel() {
     a === "create" ? "créer une sauvegarde"
       : a === "delete" ? "supprimer cette sauvegarde"
       : a === "restore" ? "RESTAURER cette sauvegarde (remplace les données actuelles)"
+      : a === "restore-upload" ? "RESTAURER à partir du fichier importé (remplace les données actuelles)"
       : "télécharger cette sauvegarde"
 
   return (
@@ -3150,9 +3183,13 @@ function BackupsPanel() {
                 Les sauvegardes automatiques apparaissent aussi ici.
               </p>
             </div>
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex flex-wrap items-center justify-center gap-2">
               <Button variant="outline" className="border-line text-ink hover:bg-app" onClick={load} title="Rafraîchir">
                 <RotateCcw className="w-4 h-4" />
+              </Button>
+              <input ref={restoreFileRef} type="file" accept=".zip,.tar.gz,application/zip,application/gzip" className="hidden" onChange={onPickRestoreFile} />
+              <Button variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-50" onClick={() => restoreFileRef.current?.click()}>
+                <RotateCcw className="w-4 h-4 mr-2" /> Restaurer depuis un fichier
               </Button>
               <Button className="bg-brand hover:bg-brand-hover text-white" onClick={() => ask("create")}>
                 <Save className="w-4 h-4 mr-2" /> Sauvegarder maintenant
@@ -3178,10 +3215,11 @@ function BackupsPanel() {
                       <span className="text-ink-faint"> · {b.kind === "tar.gz" ? "auto" : "manuelle"}</span>
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button type="button" onClick={() => ask("restore", b.name)} className="p-1.5 text-ink-muted hover:text-amber-600" title="Restaurer">
-                      <RotateCcw className="w-4 h-4" />
-                    </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button variant="outline" size="sm" className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                      onClick={() => ask("restore", b.name)}>
+                      <RotateCcw className="w-4 h-4 mr-1.5" /> Restaurer
+                    </Button>
                     <button type="button" onClick={() => ask("download", b.name)} className="p-1.5 text-ink-muted hover:text-brand" title="Télécharger">
                       <Download className="w-4 h-4" />
                     </button>
@@ -3200,9 +3238,10 @@ function BackupsPanel() {
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 p-4 rounded-lg">
             <div className="w-full max-w-sm rounded-lg bg-surface border border-line shadow-xl p-5">
               <h3 className="text-base font-semibold text-ink mb-1">Confirmer votre identité</h3>
-              {pw.action === "restore" ? (
+              {pw.action === "restore" || pw.action === "restore-upload" ? (
                 <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2 mb-3">
                   ⚠️ La restauration <strong>remplace les données actuelles</strong>. Vos données présentes seront d'abord copiées par sécurité, puis remplacées.
+                  {pw.fileName ? <><br />Fichier : <strong>{pw.fileName}</strong></> : null}
                 </p>
               ) : null}
               <p className="text-sm text-ink-muted mb-3">Saisissez votre mot de passe pour {pwLabel(pw.action)}.</p>
@@ -3213,12 +3252,12 @@ function BackupsPanel() {
               {pwError ? <p className="text-sm text-red-600 mt-2">{pwError}</p> : null}
               <div className="flex justify-end gap-2 mt-4">
                 <Button variant="outline" className="border-line text-ink hover:bg-app"
-                  onClick={() => { setPw(null); setPwValue(""); setPwError("") }} disabled={pwBusy}>
+                  onClick={() => { setPw(null); setPwValue(""); setPwError(""); setRestoreFile(null) }} disabled={pwBusy}>
                   Annuler
                 </Button>
                 <Button onClick={confirmPw} disabled={pwBusy}
-                  className={pw.action === "delete" || pw.action === "restore" ? "bg-red-600 hover:bg-red-700 text-white" : "bg-brand hover:bg-brand-hover text-white"}>
-                  {pwBusy ? "Vérification…" : pw.action === "create" ? "Sauvegarder" : pw.action === "delete" ? "Supprimer" : pw.action === "restore" ? "Restaurer" : "Télécharger"}
+                  className={pw.action === "delete" || pw.action === "restore" || pw.action === "restore-upload" ? "bg-red-600 hover:bg-red-700 text-white" : "bg-brand hover:bg-brand-hover text-white"}>
+                  {pwBusy ? "Vérification…" : pw.action === "create" ? "Sauvegarder" : pw.action === "delete" ? "Supprimer" : (pw.action === "restore" || pw.action === "restore-upload") ? "Restaurer" : "Télécharger"}
                 </Button>
               </div>
             </div>
