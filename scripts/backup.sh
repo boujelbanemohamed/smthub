@@ -13,14 +13,19 @@
 #
 # Variables d'environnement (optionnelles) :
 #   APP_DIR         Racine du projet          (défaut : /var/www/smt-hub)
-#   BACKUP_DIR      Dossier des sauvegardes   (défaut : /var/backups/smt-hub)
+#   BACKUP_DIR      Dossier des sauvegardes   (défaut : <APP_DIR>/backups)
 #   RETENTION_DAYS  Jours de rétention        (défaut : 14)
 #   INCLUDE_ENV     Inclure .env.production   (défaut : 1 ; mettre 0 pour exclure)
+#
+# ℹ️ Le dossier de sauvegarde par défaut (<APP_DIR>/backups) est le MÊME que
+#    celui lu par le panneau « Sauvegardes » de l'admin : les sauvegardes du
+#    cron y sont donc visibles et téléchargeables depuis l'interface. Si vous
+#    changez BACKUP_DIR, définissez la même valeur dans .env.production.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/var/www/smt-hub}"
-BACKUP_DIR="${BACKUP_DIR:-/var/backups/smt-hub}"
+BACKUP_DIR="${BACKUP_DIR:-$APP_DIR/backups}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
 INCLUDE_ENV="${INCLUDE_ENV:-1}"
 

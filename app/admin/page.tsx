@@ -1038,7 +1038,7 @@ export default function AdminPage() {
 
         {/* Management Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                      <TabsList className="flex flex-wrap w-full gap-1 bg-surface border border-line rounded-lg p-1">
+                      <TabsList className="flex flex-wrap justify-start h-auto w-full gap-1 bg-surface border border-line rounded-lg p-1">
               <TabsTrigger
                 value="users"
                 className="data-[state=active]:bg-brand data-[state=active]:text-white text-ink font-medium"
@@ -1101,6 +1101,13 @@ export default function AdminPage() {
               >
                 <Activity className="w-4 h-4 mr-2" />
                 Logs
+              </TabsTrigger>
+              <TabsTrigger
+                value="backups"
+                className="data-[state=active]:bg-brand data-[state=active]:text-white text-ink font-medium"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                Sauvegardes
               </TabsTrigger>
             </TabsList>
 
@@ -2398,6 +2405,11 @@ export default function AdminPage() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            {/* Backups Tab */}
+            <TabsContent value="backups" className="space-y-6">
+              <BackupsPanel />
+            </TabsContent>
           </Tabs>
         </main>
 
@@ -2926,6 +2938,179 @@ function AppCodeManager({ appId, appName }: { appId: number; appName: string }) 
         ) : null}
       </DialogContent>
     </Dialog>
+  )
+}
+
+// Panneau d'administration des sauvegardes : créer une sauvegarde à la demande,
+// lister celles présentes (y compris celles du cron), les télécharger et les
+// supprimer. Chaque action sensible exige une reconfirmation du mot de passe.
+function BackupsPanel() {
+  const [backups, setBackups] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+
+  // Reconfirmation du mot de passe : action en attente
+  const [pw, setPw] = useState<{ action: "create" | "download" | "delete"; name?: string } | null>(null)
+  const [pwValue, setPwValue] = useState("")
+  const [pwError, setPwError] = useState("")
+  const [pwBusy, setPwBusy] = useState(false)
+
+  const load = async () => {
+    setLoading(true)
+    setError("")
+    try {
+      const res = await fetch("/api/admin/backups")
+      if (res.ok) setBackups(await res.json())
+      else setError("Impossible de charger les sauvegardes.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  const fmtSize = (b: number) =>
+    b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} Mo` : `${Math.max(1, Math.round(b / 1024))} Ko`
+
+  const ask = (action: "create" | "download" | "delete", name?: string) => {
+    setPwValue("")
+    setPwError("")
+    setPw({ action, name })
+  }
+
+  const confirmPw = async () => {
+    if (!pw) return
+    if (!pwValue) { setPwError("Saisissez votre mot de passe."); return }
+    setPwBusy(true)
+    setPwError("")
+    try {
+      if (pw.action === "create") {
+        const res = await fetch("/api/admin/backups", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: pwValue }),
+        })
+        if (res.ok) { setPw(null); await load() }
+        else { const d = await res.json().catch(() => ({})); setPwError(d.error || "Échec de la création.") }
+      } else if (pw.action === "delete" && pw.name) {
+        const res = await fetch(`/api/admin/backups/${encodeURIComponent(pw.name)}`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: pwValue }),
+        })
+        if (res.ok) { setPw(null); await load() }
+        else { const d = await res.json().catch(() => ({})); setPwError(d.error || "Échec de la suppression.") }
+      } else if (pw.action === "download" && pw.name) {
+        const res = await fetch(`/api/admin/backups/${encodeURIComponent(pw.name)}/download`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: pwValue }),
+        })
+        if (res.ok) {
+          const blob = await res.blob()
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement("a")
+          a.href = url
+          a.download = pw.name
+          document.body.appendChild(a)
+          a.click()
+          a.remove()
+          URL.revokeObjectURL(url)
+          setPw(null)
+        } else { const d = await res.json().catch(() => ({})); setPwError(d.error || "Échec du téléchargement.") }
+      }
+    } catch {
+      setPwError("Erreur réseau.")
+    } finally {
+      setPwBusy(false)
+    }
+  }
+
+  return (
+    <Card className="relative bg-surface border border-line shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)]">
+      <CardHeader>
+        <div className="flex flex-wrap justify-between items-center gap-2">
+          <div>
+            <CardTitle className="text-ink">Sauvegardes</CardTitle>
+            <p className="text-sm text-ink-muted">
+              Archive complète des données (utilisateurs, applications, coffre-fort, dépôts de code, annonces…) et des secrets.
+              Les sauvegardes automatiques du cron apparaissent aussi ici.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="border-line text-ink hover:bg-app" onClick={load} title="Rafraîchir">
+              <RotateCcw className="w-4 h-4" />
+            </Button>
+            <Button className="bg-brand hover:bg-brand-hover text-white" onClick={() => ask("create")}>
+              <Save className="w-4 h-4 mr-2" /> Sauvegarder maintenant
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {error ? <p className="text-sm text-red-600 mb-3">{error}</p> : null}
+        {loading ? (
+          <p className="text-sm text-ink-muted">Chargement…</p>
+        ) : backups.length === 0 ? (
+          <p className="text-sm text-ink-muted">Aucune sauvegarde pour l'instant. Cliquez sur « Sauvegarder maintenant ».</p>
+        ) : (
+          <ul className="space-y-2">
+            {backups.map((b) => (
+              <li key={b.name} className="flex items-center justify-between gap-2 border border-line rounded-md p-3">
+                <div className="min-w-0">
+                  <p className="text-sm text-ink font-medium truncate">{b.name}</p>
+                  <p className="text-xs text-ink-muted">
+                    {new Date(b.created_at).toLocaleString("fr-FR")} · {fmtSize(b.size)}
+                    <span className="text-ink-faint"> · {b.kind === "tar.gz" ? "auto (cron)" : "manuelle"}</span>
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button type="button" onClick={() => ask("download", b.name)} className="p-1.5 text-ink-muted hover:text-brand" title="Télécharger">
+                    <Download className="w-4 h-4" />
+                  </button>
+                  <button type="button" onClick={() => ask("delete", b.name)} className="p-1.5 text-ink-muted hover:text-red-600" title="Supprimer">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+
+      {/* Reconfirmation du mot de passe */}
+      {pw ? (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 p-4 rounded-lg">
+          <div className="w-full max-w-sm rounded-lg bg-surface border border-line shadow-xl p-5">
+            <h3 className="text-base font-semibold text-ink mb-1">Confirmer votre identité</h3>
+            <p className="text-sm text-ink-muted mb-3">
+              Saisissez votre mot de passe pour{" "}
+              {pw.action === "create" ? "créer une sauvegarde" : pw.action === "delete" ? "supprimer cette sauvegarde" : "télécharger cette sauvegarde"}.
+            </p>
+            <Input
+              type="password"
+              value={pwValue}
+              autoFocus
+              onChange={(e) => setPwValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); confirmPw() } }}
+              placeholder="Mot de passe"
+              className="bg-surface border-line text-ink"
+            />
+            {pwError ? <p className="text-sm text-red-600 mt-2">{pwError}</p> : null}
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" className="border-line text-ink hover:bg-app"
+                onClick={() => { setPw(null); setPwValue(""); setPwError("") }} disabled={pwBusy}>
+                Annuler
+              </Button>
+              <Button onClick={confirmPw} disabled={pwBusy}
+                className={pw.action === "delete" ? "bg-red-600 hover:bg-red-700 text-white" : "bg-brand hover:bg-brand-hover text-white"}>
+                {pwBusy ? "Vérification…" : pw.action === "create" ? "Sauvegarder" : pw.action === "delete" ? "Supprimer" : "Télécharger"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </Card>
   )
 }
 

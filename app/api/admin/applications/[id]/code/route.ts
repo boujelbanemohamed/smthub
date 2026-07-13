@@ -10,10 +10,10 @@ function unauthorized(error: unknown) {
 }
 
 // GET → liste des dépôts de code de l'application (admin)
-export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requireAdmin()
-    const appId = parseInt(params.id)
+    const appId = parseInt((await params).id)
     if (Number.isNaN(appId)) return NextResponse.json({ error: "Application invalide" }, { status: 400 })
     return NextResponse.json(await listDeposits(appId))
   } catch (error) {
@@ -24,10 +24,10 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 
 // POST (multipart/form-data) → charge un dépôt de code (admin)
 //   champs : note, kind ("folder" | "zip"), files[] , paths (JSON des chemins relatifs)
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const admin = await requireAdmin()
-    const appId = parseInt(params.id)
+    const appId = parseInt((await params).id)
     if (Number.isNaN(appId)) return NextResponse.json({ error: "Application invalide" }, { status: 400 })
 
     const form = await request.formData()

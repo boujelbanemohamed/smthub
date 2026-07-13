@@ -8,10 +8,10 @@ import { logApplicationAction } from "@/lib/logger"
 // Exige une reconfirmation du mot de passe de l'administrateur connecté
 // (envoyé dans le corps de la requête). Si le dépôt est déjà une unique
 // archive .zip, elle est renvoyée telle quelle.
-export async function POST(request: NextRequest, { params }: { params: { id: string; depositId: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string; depositId: string }> }) {
   try {
     const admin = await requireAdmin()
-    const appId = parseInt(params.id)
+    const appId = parseInt((await params).id)
     if (Number.isNaN(appId)) return NextResponse.json({ error: "Application invalide" }, { status: 400 })
 
     const reqBody = await request.json().catch(() => ({}))
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: "Mot de passe incorrect" }, { status: 401 })
     }
 
-    const deposit = await getDeposit(appId, params.depositId)
+    const deposit = await getDeposit(appId, (await params).depositId)
     if (!deposit) return NextResponse.json({ error: "Dépôt introuvable" }, { status: 404 })
 
     const files = await readDepositFiles(deposit)

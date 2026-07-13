@@ -38,12 +38,12 @@ async function writeUsers(users: User[]): Promise<void> {
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAdmin()
 
-    const userId = parseInt(params.id)
+    const userId = parseInt((await params).id)
     const userData = await request.json()
 
     const users = await readUsers()
@@ -117,12 +117,12 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await requireAdmin()
 
-    const userId = parseInt(params.id)
+    const userId = parseInt((await params).id)
     const users = await readUsers()
     const userIndex = users.findIndex(user => user.id === userId)
 

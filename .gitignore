@@ -23,6 +23,9 @@ yarn-error.log*
 # données applicatives (ne jamais versionner : utilisateurs, logs, annonces…)
 /data/
 
+# archives de sauvegarde (contiennent données + secrets — jamais dans git)
+/backups/
+
 # vercel
 .vercel
 

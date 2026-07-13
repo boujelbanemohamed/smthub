@@ -37,7 +37,7 @@ const USERS_FILE = path.join(process.cwd(), "data", "users.json")
  */
 export async function getCurrentUser(): Promise<User | null> {
   try {
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const session = cookieStore.get(SESSION_COOKIE_NAME)
 
     if (!session?.value) {
@@ -129,7 +129,7 @@ export async function verifyCurrentUserPassword(password: string): Promise<boole
  * Clear user session
  */
 export async function clearSession(): Promise<void> {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   cookieStore.delete(SESSION_COOKIE_NAME)
 }
 
@@ -137,7 +137,7 @@ export async function clearSession(): Promise<void> {
  * Update user session with new data
  */
 export async function updateSession(user: User): Promise<void> {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const token = await signSession({
     id: user.id,
     nom: user.nom,

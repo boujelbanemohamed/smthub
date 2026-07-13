@@ -6,7 +6,7 @@ import { clearPresence } from "@/lib/presence-store"
 
 export async function POST() {
   try {
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const session = cookieStore.get(SESSION_COOKIE_NAME)
     let userId: number | undefined
     let userName: string | undefined

@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     }
 
     const token = await signSession(sessionData)
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     cookieStore.set(SESSION_COOKIE_NAME, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

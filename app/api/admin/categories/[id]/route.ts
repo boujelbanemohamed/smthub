@@ -5,11 +5,11 @@ import { logAction } from "@/lib/logger"
 
 // PUT { name } → renomme une catégorie (admin). Le nouveau nom est répercuté
 // sur les applications qui l'utilisaient.
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const admin = await requireAdmin()
     const { name } = await request.json()
-    const result = await renameCategory(params.id, typeof name === "string" ? name : "")
+    const result = await renameCategory((await params).id, typeof name === "string" ? name : "")
     if ("error" in result) {
       const status = result.error === "Catégorie introuvable" ? 404 : 400
       return NextResponse.json({ error: result.error }, { status })
@@ -26,12 +26,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
 // DELETE → supprime une catégorie (admin). Les applications concernées sont
 // remises à « sans catégorie ».
-export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const admin = await requireAdmin()
-    const result = await deleteCategory(params.id)
+    const result = await deleteCategory((await params).id)
     if (!result.ok) return NextResponse.json({ error: "Catégorie introuvable" }, { status: 404 })
-    await logAction("Suppression catégorie", `Catégorie supprimée (${params.id})`, "INFO", admin.id, admin.nom)
+    await logAction("Suppression catégorie", `Catégorie supprimée (${(await params).id})`, "INFO", admin.id, admin.nom)
     return NextResponse.json({ success: true })
   } catch (error) {
     if (error instanceof Error && (error.message === "Admin access required" || error.message === "Authentication required")) {

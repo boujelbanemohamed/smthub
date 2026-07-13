@@ -38,12 +38,12 @@ async function writeApplications(applications: Application[]) {
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const admin = await requireAdmin()
 
-    const appId = parseInt(params.id)
+    const appId = parseInt((await params).id)
     const appData = await request.json()
 
     // Le logo peut être un data URI base64 : borne la taille (~350 Ko de texte).
@@ -82,12 +82,12 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const admin = await requireAdmin()
 
-    const appId = parseInt(params.id)
+    const appId = parseInt((await params).id)
     const applications = await readApplications()
     const app = applications.find(app => app.id === appId)
 

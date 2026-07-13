@@ -46,11 +46,11 @@ async function writeUserAccess(access: UserAccess[]) {
   await fs.writeFile(ACCESS_FILE, JSON.stringify(access, null, 2))
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requireAdmin()
 
-    const id = Number.parseInt(params.id)
+    const id = Number.parseInt((await params).id)
     const { nom, email, password, role } = await request.json()
 
     if (!nom || !email || !role) {
@@ -92,11 +92,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requireAdmin()
 
-    const id = Number.parseInt(params.id)
+    const id = Number.parseInt((await params).id)
     const users = await readUsers()
     const filteredUsers = users.filter((user) => user.id !== id)
 

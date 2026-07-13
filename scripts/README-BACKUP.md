@@ -10,15 +10,21 @@ la sauvegarde car il est **indispensable** pour relire le coffre-fort chiffré.
 ```bash
 cd /var/www/smt-hub
 bash scripts/backup.sh
-# → crée /var/backups/smt-hub/smthub-backup-AAAA-MM-JJ_HH-MM-SS.tar.gz
+# → crée backups/smthub-backup-AAAA-MM-JJ_HH-MM-SS.tar.gz
 ```
+
+> 💡 Le dossier de sauvegarde par défaut (`<projet>/backups`) est **le même**
+> que celui lu par le panneau **« Sauvegardes »** de l'admin : les sauvegardes
+> automatiques du cron y sont donc **visibles et téléchargeables** depuis
+> l'interface. Si vous changez `BACKUP_DIR`, mettez la **même valeur** dans
+> `.env.production` pour que l'admin les voie aussi.
 
 Options (variables d'environnement) :
 
 | Variable | Défaut | Rôle |
 |---|---|---|
 | `APP_DIR` | `/var/www/smt-hub` | Racine du projet |
-| `BACKUP_DIR` | `/var/backups/smt-hub` | Où stocker les archives |
+| `BACKUP_DIR` | `<APP_DIR>/backups` | Où stocker les archives (idem panneau admin) |
 | `RETENTION_DAYS` | `14` | Suppression auto des archives plus vieilles |
 | `INCLUDE_ENV` | `1` | Inclure `.env.production` (mettre `0` pour exclure) |
 
@@ -50,9 +56,14 @@ Vérifier ensuite : `crontab -l` et, après la première exécution,
 
 ```bash
 cd /var/www/smt-hub
-bash scripts/restore.sh /var/backups/smt-hub/smthub-backup-AAAA-MM-JJ_HH-MM-SS.tar.gz
+bash scripts/restore.sh backups/smthub-backup-AAAA-MM-JJ_HH-MM-SS.tar.gz
 pm2 reload smt-hub
 ```
+
+> La restauration reste **volontairement en ligne de commande** (opération rare
+> et sensible qui remplace les données en cours). Le panneau admin permet de
+> créer, lister, télécharger et supprimer des sauvegardes — mais pas de
+> restaurer.
 
 Les données actuelles sont d'abord **déplacées** vers
 `data.avant-restauration-<horodatage>` (jamais supprimées) : en cas d'erreur,

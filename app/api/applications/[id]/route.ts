@@ -39,10 +39,10 @@ async function writeApplications(applications: Application[]) {
   await fs.writeFile(DATA_FILE, JSON.stringify(applications, null, 2))
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requireAdmin()
-    const id = Number.parseInt(params.id)
+    const id = Number.parseInt((await params).id)
     const body = await request.json()
     const { nom, image_url, app_url, ordre_affichage } = body
 
@@ -72,10 +72,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await requireAdmin()
-    const id = Number.parseInt(params.id)
+    const id = Number.parseInt((await params).id)
     const applications = await readApplications()
     const filteredApps = applications.filter((app) => app.id !== id)
 
