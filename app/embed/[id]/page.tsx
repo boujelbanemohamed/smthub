@@ -85,12 +85,6 @@ export default function EmbedPage() {
           <span className="text-line">|</span>
           <span className="font-medium text-ink truncate">{app?.nom}</span>
         </div>
-        {app ? (
-          <a href={app.app_url} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-brand transition-colors shrink-0">
-            <ExternalLink className="w-4 h-4" /> Nouvel onglet
-          </a>
-        ) : null}
       </header>
 
       {/* Cadre de l'application */}
