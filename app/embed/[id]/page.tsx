@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, ExternalLink } from "lucide-react"
 import { AppAvatar } from "@/components/ui/app-avatar"
+import { BrandLogo } from "@/components/brand-logo"
 
 interface App {
   id: number
@@ -82,7 +83,9 @@ export default function EmbedPage() {
       {/* En-tête SMT HUB */}
       <header className="flex items-center justify-between gap-3 border-b border-line bg-surface px-4 py-2 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <Link href="/" className="inline-flex items-center gap-1 text-ink-muted hover:text-brand transition-colors">
+          <Link href="/" className="shrink-0"><BrandLogo height={26} /></Link>
+          <span className="text-line">|</span>
+          <Link href="/" className="inline-flex items-center gap-1 text-ink-muted hover:text-brand transition-colors shrink-0">
             <ArrowLeft className="w-4 h-4" /> Portail
           </Link>
           <span className="text-line">|</span>
