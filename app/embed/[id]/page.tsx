@@ -4,11 +4,14 @@ import { useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, ExternalLink } from "lucide-react"
+import { AppAvatar } from "@/components/ui/app-avatar"
 
 interface App {
   id: number
   nom: string
   app_url: string
+  image_url?: string
+  avatar_color?: string
   open_mode?: "newtab" | "embed" | "embed_newtab"
 }
 
@@ -83,6 +86,7 @@ export default function EmbedPage() {
             <ArrowLeft className="w-4 h-4" /> Portail
           </Link>
           <span className="text-line">|</span>
+          {app ? <AppAvatar app={app as any} size={24} /> : null}
           <span className="font-medium text-ink truncate">{app?.nom}</span>
         </div>
         {app && app.open_mode === "embed_newtab" ? (
