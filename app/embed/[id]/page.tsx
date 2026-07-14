@@ -9,7 +9,7 @@ interface App {
   id: number
   nom: string
   app_url: string
-  open_mode?: "newtab" | "embed"
+  open_mode?: "newtab" | "embed" | "embed_newtab"
 }
 
 // Affiche une application « intégrée » dans le portail (iframe), avec un en-tête
@@ -85,6 +85,12 @@ export default function EmbedPage() {
           <span className="text-line">|</span>
           <span className="font-medium text-ink truncate">{app?.nom}</span>
         </div>
+        {app && app.open_mode === "embed_newtab" ? (
+          <a href={app.app_url} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-brand transition-colors shrink-0">
+            <ExternalLink className="w-4 h-4" /> Nouvel onglet
+          </a>
+        ) : null}
       </header>
 
       {/* Cadre de l'application */}

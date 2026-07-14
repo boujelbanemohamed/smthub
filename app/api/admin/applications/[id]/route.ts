@@ -15,7 +15,7 @@ interface Application {
   ordre_affichage: number
   avatar_color?: string
   category?: string
-  open_mode?: "newtab" | "embed"
+  open_mode?: "newtab" | "embed" | "embed_newtab"
 }
 
 async function readApplications(): Promise<Application[]> {

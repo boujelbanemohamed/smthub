@@ -125,7 +125,7 @@ interface Application {
   ordre_affichage: number
   avatar_color?: string
   category?: string
-  open_mode?: "newtab" | "embed"
+  open_mode?: "newtab" | "embed" | "embed_newtab"
 }
 
 interface UserAccess {
@@ -3278,7 +3278,7 @@ function ApplicationForm({ application, onSubmit, categories = [] }: { applicati
     ordre_affichage: application?.ordre_affichage || 1,
     avatar_color: application?.avatar_color || "#1877f2",
     category: (application as any)?.category || "",
-    open_mode: (application as any)?.open_mode === "embed" ? "embed" : "newtab"
+    open_mode: ["embed", "embed_newtab"].includes((application as any)?.open_mode) ? (application as any).open_mode : "newtab"
   })
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [logoError, setLogoError] = useState("")
@@ -3328,7 +3328,7 @@ function ApplicationForm({ application, onSubmit, categories = [] }: { applicati
         ordre_affichage: application.ordre_affichage || 1,
         avatar_color: application.avatar_color || "#1877f2",
         category: (application as any).category || "",
-        open_mode: (application as any).open_mode === "embed" ? "embed" : "newtab"
+        open_mode: ["embed", "embed_newtab"].includes((application as any).open_mode) ? (application as any).open_mode : "newtab"
       })
     } else {
       setFormData({ nom: "", app_url: "", image_url: "", ordre_affichage: 1, avatar_color: "#1877f2", category: "", open_mode: "newtab" })
@@ -3413,6 +3413,7 @@ function ApplicationForm({ application, onSubmit, categories = [] }: { applicati
         >
           <option value="newtab">Nouvel onglet</option>
           <option value="embed">Intégré dans le portail (iframe)</option>
+          <option value="embed_newtab">Intégré (iframe) + possibilité d'ouvrir dans un nouvel onglet</option>
         </select>
         <p className="text-xs text-ink-faint mt-1">
           « Intégré » garde l'utilisateur dans le portail. À réserver aux applications qui autorisent l'affichage en iframe
