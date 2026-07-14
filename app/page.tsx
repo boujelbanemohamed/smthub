@@ -31,6 +31,8 @@ interface Application {
   app_url: string
   ordre_affichage: number
   category?: string
+  // "embed" → ouverture dans le portail (iframe) ; sinon nouvel onglet.
+  open_mode?: "newtab" | "embed"
 }
 
 export default function HomePage() {
@@ -538,9 +540,9 @@ export default function HomePage() {
                       <Star className={`w-4 h-4 ${isFav ? "fill-yellow-400 text-yellow-400" : ""}`} />
                     </button>
                     <Link
-                      href={app.app_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href={app.open_mode === "embed" ? `/embed/${app.id}` : app.app_url}
+                      target={app.open_mode === "embed" ? undefined : "_blank"}
+                      rel={app.open_mode === "embed" ? undefined : "noopener noreferrer"}
                       className="group flex-1"
                       onClick={() => {
                         // Journalise l'ouverture (base des statistiques d'usage) — sans bloquer la navigation

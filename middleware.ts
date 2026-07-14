@@ -44,7 +44,10 @@ export async function middleware(request: NextRequest) {
     `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
-    "font-src 'self' data:"
+    "font-src 'self' data:",
+    // Autorise l'affichage d'applications en cadre intégré (page /embed).
+    "frame-src 'self' https:",
+    "child-src 'self' https:"
   ].join("; ") + ";"
   response.headers.set("Content-Security-Policy", csp)
   

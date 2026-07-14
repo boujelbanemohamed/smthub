@@ -125,6 +125,7 @@ interface Application {
   ordre_affichage: number
   avatar_color?: string
   category?: string
+  open_mode?: "newtab" | "embed"
 }
 
 interface UserAccess {
@@ -3276,7 +3277,8 @@ function ApplicationForm({ application, onSubmit, categories = [] }: { applicati
     image_url: application?.image_url || "",
     ordre_affichage: application?.ordre_affichage || 1,
     avatar_color: application?.avatar_color || "#1877f2",
-    category: (application as any)?.category || ""
+    category: (application as any)?.category || "",
+    open_mode: (application as any)?.open_mode === "embed" ? "embed" : "newtab"
   })
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [logoError, setLogoError] = useState("")
@@ -3325,10 +3327,11 @@ function ApplicationForm({ application, onSubmit, categories = [] }: { applicati
         image_url: application.image_url || "",
         ordre_affichage: application.ordre_affichage || 1,
         avatar_color: application.avatar_color || "#1877f2",
-        category: (application as any).category || ""
+        category: (application as any).category || "",
+        open_mode: (application as any).open_mode === "embed" ? "embed" : "newtab"
       })
     } else {
-      setFormData({ nom: "", app_url: "", image_url: "", ordre_affichage: 1, avatar_color: "#1877f2", category: "" })
+      setFormData({ nom: "", app_url: "", image_url: "", ordre_affichage: 1, avatar_color: "#1877f2", category: "", open_mode: "newtab" })
     }
   }, [application])
 
@@ -3336,7 +3339,7 @@ function ApplicationForm({ application, onSubmit, categories = [] }: { applicati
     e.preventDefault()
     onSubmit(formData)
     if (!application) {
-      setFormData({ nom: "", app_url: "", image_url: "", ordre_affichage: 1, avatar_color: "#1877f2", category: "" })
+      setFormData({ nom: "", app_url: "", image_url: "", ordre_affichage: 1, avatar_color: "#1877f2", category: "", open_mode: "newtab" })
     }
   }
 
@@ -3396,6 +3399,25 @@ function ApplicationForm({ application, onSubmit, categories = [] }: { applicati
             <option key={c.id} value={c.name}>{c.name}</option>
           ))}
         </select>
+      </div>
+      <div>
+        <Label htmlFor="open_mode" className="text-ink font-medium">
+          Ouverture
+          <span className="text-ink-muted font-normal text-sm ml-1">(comment l'application s'ouvre pour l'utilisateur)</span>
+        </Label>
+        <select
+          id="open_mode"
+          value={(formData as any).open_mode}
+          onChange={(e) => setFormData({ ...formData, open_mode: e.target.value })}
+          className="w-full px-3 py-2 border border-line rounded-md bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-colors duration-200"
+        >
+          <option value="newtab">Nouvel onglet</option>
+          <option value="embed">Intégré dans le portail (iframe)</option>
+        </select>
+        <p className="text-xs text-ink-faint mt-1">
+          « Intégré » garde l'utilisateur dans le portail. À réserver aux applications qui autorisent l'affichage en iframe
+          (souvent vos apps internes) ; les services externes type Google/Slack le bloquent et resteront en nouvel onglet.
+        </p>
       </div>
       <div>
         <Label htmlFor="image_url" className="text-ink font-medium">
