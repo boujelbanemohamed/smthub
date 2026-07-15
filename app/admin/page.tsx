@@ -583,13 +583,43 @@ export default function AdminPage() {
   const usersImportRef = useRef<HTMLInputElement>(null)
   const appsImportRef = useRef<HTMLInputElement>(null)
 
+  // Libellé + style du tag de rôle, en distinguant les 4 profils :
+  // super-admin, admin de banque, utilisateur de banque, utilisateur (hors banque).
+  const bankName = (id?: number | null) => banks.find((b) => b.id === id)?.nom
+  const roleBadge = (u: User) => {
+    const isAdmin = u.role === "admin"
+    const inBank = u.banque_id != null
+    const bn = bankName(u.banque_id)
+    if (isAdmin && !inBank)
+      return { label: "Super administrateur", className: "bg-brand text-white" }
+    if (isAdmin && inBank)
+      return { label: `Admin banque${bn ? " · " + bn : ""}`, className: "bg-purple-600 text-white" }
+    if (!isAdmin && inBank)
+      return { label: `Utilisateur banque${bn ? " · " + bn : ""}`, className: "bg-blue-100 text-blue-800 border border-blue-200" }
+    return { label: "Utilisateur", className: "bg-surface-muted text-ink" }
+  }
+
   // Recherche dans la liste des utilisateurs (admin)
   const [userSearch, setUserSearch] = useState("")
   const filteredUsers = users.filter((u) => {
     const q = userSearch.trim().toLowerCase()
     if (!q) return true
-    return u.nom.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.role.toLowerCase().includes(q)
+    return (
+      u.nom.toLowerCase().includes(q) ||
+      u.email.toLowerCase().includes(q) ||
+      roleBadge(u).label.toLowerCase().includes(q) ||
+      (bankName(u.banque_id) || "").toLowerCase().includes(q)
+    )
   })
+
+  // Pagination de la liste des utilisateurs
+  const USERS_PER_PAGE = 10
+  const [usersPage, setUsersPage] = useState(0)
+  const usersPageCount = Math.max(1, Math.ceil(filteredUsers.length / USERS_PER_PAGE))
+  // Revenir à la première page quand la recherche change ou que la liste rétrécit
+  useEffect(() => { setUsersPage(0) }, [userSearch])
+  useEffect(() => { if (usersPage > usersPageCount - 1) setUsersPage(usersPageCount - 1) }, [usersPageCount, usersPage])
+  const pagedUsers = filteredUsers.slice(usersPage * USERS_PER_PAGE, usersPage * USERS_PER_PAGE + USERS_PER_PAGE)
 
   const refreshUsers = async () => {
     const res = await fetch("/api/admin/users")
@@ -1220,7 +1250,7 @@ export default function AdminPage() {
                   {filteredUsers.length === 0 && (
                     <p className="text-ink-muted text-sm">Aucun utilisateur ne correspond à « {userSearch} ».</p>
                   )}
-                  {filteredUsers.map((user) => (
+                  {pagedUsers.map((user) => (
                     <div key={user.id} className="flex items-center justify-between p-4 border border-line rounded-lg">
                       <div className="flex items-center space-x-4">
                         <UserAvatar name={user.nom} avatar={user.avatar} size={40} />
@@ -1228,12 +1258,12 @@ export default function AdminPage() {
                           <p className="font-medium text-ink">{user.nom}</p>
                           <p className="text-sm text-ink-muted">{user.email}</p>
                         </div>
-                        <Badge
-                          variant={user.role === "admin" ? "default" : "secondary"}
-                          className={user.role === "admin" ? "bg-brand text-white" : "bg-surface-muted text-ink"}
-                        >
-                          {user.role}
+                        <Badge className={roleBadge(user).className}>
+                          {roleBadge(user).label}
                         </Badge>
+                        {user.actif === false && (
+                          <Badge className="bg-red-100 text-red-700 border border-red-200">Désactivé</Badge>
+                        )}
                       </div>
                       <div className="flex items-center space-x-2">
                         <Dialog open={editUserDialogOpen} onOpenChange={setEditUserDialogOpen}>
@@ -1271,6 +1301,34 @@ export default function AdminPage() {
                     </div>
                   ))}
                 </div>
+                {filteredUsers.length > USERS_PER_PAGE && (
+                  <div className="flex items-center justify-between mt-4">
+                    <p className="text-sm text-ink-muted">
+                      {usersPage * USERS_PER_PAGE + 1}–{Math.min((usersPage + 1) * USERS_PER_PAGE, filteredUsers.length)} sur {filteredUsers.length}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-line text-ink"
+                        disabled={usersPage === 0}
+                        onClick={() => setUsersPage((p) => Math.max(0, p - 1))}
+                      >
+                        Précédent
+                      </Button>
+                      <span className="text-sm text-ink-muted">Page {usersPage + 1} / {usersPageCount}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-line text-ink"
+                        disabled={usersPage >= usersPageCount - 1}
+                        onClick={() => setUsersPage((p) => Math.min(usersPageCount - 1, p + 1))}
+                      >
+                        Suivant
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -2574,7 +2632,22 @@ function UserForm({ user, onSubmit, banks = [], isSuper = false }: { user?: User
   const [avatar, setAvatar] = useState<string | null>(user?.avatar ?? null)
   const [uploading, setUploading] = useState(false)
   const [avatarError, setAvatarError] = useState("")
+  const [formError, setFormError] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Profil (super-admin) déduit du couple rôle + banque, avec 4 valeurs distinctes.
+  const profile: "super_admin" | "user" | "admin_banque" | "user_banque" =
+    formData.role === "admin"
+      ? (formData.banque_id != null ? "admin_banque" : "super_admin")
+      : (formData.banque_id != null ? "user_banque" : "user")
+  const needsBank = profile === "admin_banque" || profile === "user_banque"
+  const setProfile = (value: string) => {
+    setFormError("")
+    if (value === "super_admin") setFormData((f) => ({ ...f, role: "admin", banque_id: null }))
+    else if (value === "user") setFormData((f) => ({ ...f, role: "utilisateur", banque_id: null }))
+    else if (value === "admin_banque") setFormData((f) => ({ ...f, role: "admin", banque_id: f.banque_id ?? null }))
+    else if (value === "user_banque") setFormData((f) => ({ ...f, role: "utilisateur", banque_id: f.banque_id ?? null }))
+  }
 
   // Mettre à jour le formulaire quand l'utilisateur change
   useEffect(() => {
@@ -2620,6 +2693,18 @@ function UserForm({ user, onSubmit, banks = [], isSuper = false }: { user?: User
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    // Un profil rattaché à une banque exige de sélectionner une banque.
+    if (isSuper && needsBank) {
+      if (banks.length === 0) {
+        setFormError("Aucune banque n'existe. Veuillez d'abord créer une banque avant de rattacher cet utilisateur.")
+        return
+      }
+      if (formData.banque_id == null) {
+        setFormError("Veuillez sélectionner une banque pour ce profil.")
+        return
+      }
+    }
+    setFormError("")
     // Pour la modification, ne pas envoyer le mot de passe s'il est vide
     const base: any = user && !formData.mot_de_passe
       ? { nom: formData.nom, email: formData.email, role: formData.role }
@@ -2710,39 +2795,69 @@ function UserForm({ user, onSubmit, banks = [], isSuper = false }: { user?: User
           required={!user}
         />
       </div>
-      <div>
-        <Label htmlFor="role" className="text-ink font-medium">Rôle</Label>
-        <Select value={formData.role} onValueChange={(value) => setFormData({ ...formData, role: value as "admin" | "utilisateur" })}>
-          <SelectTrigger className="border-line">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-surface border border-line">
-            <SelectItem value="utilisateur">Utilisateur</SelectItem>
-            <SelectItem value="admin">Administrateur</SelectItem>
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-ink-faint mt-1">
-          « Administrateur » dans une banque = admin de cette banque (périmètre limité à sa banque).
-        </p>
-      </div>
-
-      {/* Banque : réservé au super-admin */}
       {isSuper ? (
+        <>
+          <div>
+            <Label htmlFor="profile" className="text-ink font-medium">Profil</Label>
+            <Select value={profile} onValueChange={setProfile}>
+              <SelectTrigger className="border-line">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-surface border border-line">
+                <SelectItem value="super_admin">Super administrateur</SelectItem>
+                <SelectItem value="user">Utilisateur</SelectItem>
+                <SelectItem value="admin_banque">Admin banque</SelectItem>
+                <SelectItem value="user_banque">Utilisateur banque</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-ink-faint mt-1">
+              « Super administrateur » : accès global. « Admin banque » : gère sa banque.
+              « Utilisateur banque » : accède aux applications de sa banque. « Utilisateur » : hors banque.
+            </p>
+          </div>
+
+          {/* Sélection de la banque quand le profil y est rattaché */}
+          {needsBank && (
+            banks.length === 0 ? (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                Aucune banque n'existe pour le moment. Veuillez d'abord créer une banque
+                dans l'onglet « Banques » avant de rattacher cet utilisateur.
+              </div>
+            ) : (
+              <div>
+                <Label htmlFor="banque_id" className="text-ink font-medium">Banque</Label>
+                <select
+                  id="banque_id"
+                  value={formData.banque_id ?? ""}
+                  onChange={(e) => { setFormError(""); setFormData({ ...formData, banque_id: e.target.value === "" ? null : Number(e.target.value) }) }}
+                  className="w-full px-3 py-2 border border-line rounded-md bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-brand"
+                >
+                  <option value="">— Sélectionner une banque —</option>
+                  {banks.map((b) => (
+                    <option key={b.id} value={b.id}>{b.nom}{b.actif ? "" : " (désactivée)"}</option>
+                  ))}
+                </select>
+              </div>
+            )
+          )}
+        </>
+      ) : (
         <div>
-          <Label htmlFor="banque_id" className="text-ink font-medium">Banque</Label>
-          <select
-            id="banque_id"
-            value={formData.banque_id ?? ""}
-            onChange={(e) => setFormData({ ...formData, banque_id: e.target.value === "" ? null : Number(e.target.value) })}
-            className="w-full px-3 py-2 border border-line rounded-md bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-brand"
-          >
-            <option value="">— Aucune (utilisateur global) —</option>
-            {banks.map((b) => (
-              <option key={b.id} value={b.id}>{b.nom}{b.actif ? "" : " (désactivée)"}</option>
-            ))}
-          </select>
+          <Label htmlFor="role" className="text-ink font-medium">Rôle</Label>
+          <Select value={formData.role} onValueChange={(value) => setFormData({ ...formData, role: value as "admin" | "utilisateur" })}>
+            <SelectTrigger className="border-line">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-surface border border-line">
+              <SelectItem value="utilisateur">Utilisateur</SelectItem>
+              <SelectItem value="admin">Administrateur</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-ink-faint mt-1">
+            « Administrateur » = admin de votre banque (même périmètre que vous).
+          </p>
         </div>
-      ) : null}
+      )}
 
       {/* Statut du compte */}
       <div>
@@ -2754,6 +2869,9 @@ function UserForm({ user, onSubmit, banks = [], isSuper = false }: { user?: User
         </label>
       </div>
 
+      {formError && (
+        <p className="text-sm text-red-600">{formError}</p>
+      )}
       <Button type="submit" className="w-full bg-brand hover:bg-brand-hover text-white">
         {user ? "Mettre à jour" : "Créer"}
       </Button>
