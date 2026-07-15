@@ -350,11 +350,6 @@ export default function HomePage() {
                 <div className="hidden md:block">
                   <p className="text-ink font-medium">{user.nom}</p>
                   <p className="text-ink-muted text-sm">{user.email}</p>
-                  <span className="inline-block mt-0.5 rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-medium text-brand">
-                    {user.role !== "admin"
-                      ? "Utilisateur"
-                      : (user.banque_id != null ? "Administrateur de banque" : "Super administrateur")}
-                  </span>
                 </div>
               </div>
 
@@ -397,6 +392,14 @@ export default function HomePage() {
             <h2 className="text-2xl sm:text-3xl font-bold text-white pr-10">
               Bonjour {user.nom}
             </h2>
+            <p className="mt-1 text-white/90 text-sm sm:text-base">
+              Vous êtes connecté en tant que{" "}
+              <span className="font-semibold">
+                {user.role !== "admin"
+                  ? "Utilisateur"
+                  : (user.banque_id != null ? "Administrateur de banque" : "Super administrateur")}
+              </span>
+            </p>
             <button
               type="button"
               onClick={() => setShowWelcome(false)}
