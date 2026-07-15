@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
 import { requireSuperAdmin, authErrorResponse } from "@/lib/auth"
+import { bankUserIds } from "@/lib/banks-store"
 
 const LOGS_FILE = path.join(process.cwd(), "data", "admin-logs.json")
 const USERS_FILE = path.join(process.cwd(), "data", "users.json")
@@ -33,6 +34,11 @@ export async function GET(request: NextRequest) {
     const endDate = params.get("endDate") || undefined
     const userIdParam = params.get("userId") || ""
     const userId = userIdParam && userIdParam !== "all" ? Number(userIdParam) : null
+    const bqParam = params.get("banqueId") || ""
+    let bankIds: Set<number> | null = null
+    if (bqParam && bqParam !== "all" && !Number.isNaN(Number(bqParam))) {
+      bankIds = await bankUserIds(Number(bqParam))
+    }
 
     let logs: any[] = []
     try { logs = JSON.parse(await fs.readFile(LOGS_FILE, "utf-8")) } catch { logs = [] }
@@ -46,7 +52,11 @@ export async function GET(request: NextRequest) {
     }
 
     const opens = logs.filter(
-      (l) => l.action === "Ouverture application" && inRange(l.timestamp, startDate, endDate) && (userId === null || l.userId === userId)
+      (l) =>
+        l.action === "Ouverture application" &&
+        inRange(l.timestamp, startDate, endDate) &&
+        (userId === null || l.userId === userId) &&
+        (bankIds === null || (typeof l.userId === "number" && bankIds.has(l.userId)))
     )
 
     const byApp = new Map<string, { nom: string; count: number }>()

@@ -232,6 +232,7 @@ export default function AdminPage() {
     action: "",
     status: "",
     userId: "",
+    banqueId: "",
     startDate: "",
     endDate: "",
     limit: 10
@@ -827,6 +828,7 @@ export default function AdminPage() {
       if (logFilters.action) params.append("action", logFilters.action)
       if (logFilters.status) params.append("status", logFilters.status)
       if (logFilters.userId) params.append("userId", logFilters.userId)
+      if (logFilters.banqueId) params.append("banqueId", logFilters.banqueId)
       if (logFilters.startDate) params.append("startDate", logFilters.startDate)
       if (logFilters.endDate) params.append("endDate", logFilters.endDate)
       params.append("limit", logFilters.limit.toString())
@@ -2192,7 +2194,7 @@ export default function AdminPage() {
 
             {/* Statistiques Tab */}
             <TabsContent value="stats" className="space-y-6">
-              <StatsPanel applications={applications} users={users} />
+              <StatsPanel applications={applications} users={users} banks={banks} isSuper={isSuper} />
             </TabsContent>
 
             {/* Logs Tab */}
@@ -2276,6 +2278,25 @@ export default function AdminPage() {
                          </SelectContent>
                        </Select>
                      </div>
+                     {isSuper && (
+                       <div>
+                         <Label htmlFor="logBanque" className="text-ink font-medium">Banque</Label>
+                         <Select
+                           value={logFilters.banqueId || "all"}
+                           onValueChange={(value) => updateLogFilter({ banqueId: value === "all" ? "" : value })}
+                         >
+                           <SelectTrigger className="w-full">
+                             <SelectValue placeholder="Toutes les banques" />
+                           </SelectTrigger>
+                           <SelectContent>
+                             <SelectItem value="all">Toutes les banques</SelectItem>
+                             {banks.map((b) => (
+                               <SelectItem key={b.id} value={String(b.id)}>{b.nom}</SelectItem>
+                             ))}
+                           </SelectContent>
+                         </Select>
+                       </div>
+                     )}
                      <div>
                        <Label htmlFor="logStartDate" className="text-ink font-medium">Du</Label>
                        <Input
@@ -4076,11 +4097,12 @@ function AnnouncementsPanel({ users }: { users: User[] }) {
 // ---------------------------------------------------------------------------
 // Panneau : Statistiques d'usage
 // ---------------------------------------------------------------------------
-function StatsPanel({ applications, users }: { applications: Application[]; users: User[] }) {
+function StatsPanel({ applications, users, banks = [], isSuper = false }: { applications: Application[]; users: User[]; banks?: Bank[]; isSuper?: boolean }) {
   const [data, setData] = useState<{ totalOpens: number; topApps: any[]; topUsers: any[]; firstOpen?: string | null; lastOpen?: string | null } | null>(null)
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [userId, setUserId] = useState("all")
+  const [banqueId, setBanqueId] = useState("all")
   const [dismissals, setDismissals] = useState<{ id: string; message: string; count: number; users: any[] }[]>([])
   useEffect(() => {
     fetch("/api/admin/announcement-dismissals").then((r) => r.ok ? r.json() : null).then((d) => setDismissals(d?.announcements || [])).catch(() => {})
@@ -4091,8 +4113,9 @@ function StatsPanel({ applications, users }: { applications: Application[]; user
     if (startDate) p.append("startDate", startDate)
     if (endDate) p.append("endDate", endDate)
     if (userId && userId !== "all") p.append("userId", userId)
+    if (banqueId && banqueId !== "all") p.append("banqueId", banqueId)
     fetch(`/api/admin/stats?${p.toString()}`).then((r) => r.ok ? r.json() : null).then(setData).catch(() => {})
-  }, [startDate, endDate, userId])
+  }, [startDate, endDate, userId, banqueId])
 
   const maxApp = Math.max(1, ...(data?.topApps || []).map((a) => a.count))
 
@@ -4110,6 +4133,7 @@ function StatsPanel({ applications, users }: { applications: Application[]; user
     if (startDate) p.append("startDate", startDate)
     if (endDate) p.append("endDate", endDate)
     if (userId !== "all") p.append("userId", userId)
+    if (banqueId !== "all") p.append("banqueId", banqueId)
     window.location.href = `/api/admin/stats/export?${p.toString()}`
   }
 
@@ -4238,7 +4262,19 @@ function StatsPanel({ applications, users }: { applications: Application[]; user
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Filtres */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className={`grid grid-cols-1 gap-4 ${isSuper ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
+            {isSuper && (
+              <div>
+                <Label className="text-ink font-medium">Banque</Label>
+                <Select value={banqueId} onValueChange={setBanqueId}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Toutes les banques</SelectItem>
+                    {banks.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.nom}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <Label className="text-ink font-medium">Utilisateur</Label>
               <Select value={userId} onValueChange={setUserId}>
@@ -4258,8 +4294,8 @@ function StatsPanel({ applications, users }: { applications: Application[]; user
               <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full" />
             </div>
             <div className="flex items-end">
-              {(startDate || endDate || userId !== "all") && (
-                <Button variant="outline" className="border-line text-ink" onClick={() => { setStartDate(""); setEndDate(""); setUserId("all") }}>
+              {(startDate || endDate || userId !== "all" || banqueId !== "all") && (
+                <Button variant="outline" className="border-line text-ink" onClick={() => { setStartDate(""); setEndDate(""); setUserId("all"); setBanqueId("all") }}>
                   Réinitialiser
                 </Button>
               )}

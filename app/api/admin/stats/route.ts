@@ -27,9 +27,18 @@ function inRange(ts: string, startDate?: string | null, endDate?: string | null)
 export async function GET(request: NextRequest) {
   try {
     const me = await requireAdmin()
-    // Cloisonnement : un admin de banque ne voit que les stats de sa banque.
-    const bankIds = isBankAdmin(me) ? await bankUserIds(me.banque_id!) : null
     const params = new URL(request.url).searchParams
+    // Cloisonnement : un admin de banque ne voit que les stats de sa banque.
+    // Le super-admin peut, lui, filtrer volontairement par banque via ?banqueId=.
+    let bankIds: Set<number> | null = null
+    if (isBankAdmin(me)) {
+      bankIds = await bankUserIds(me.banque_id!)
+    } else {
+      const bq = params.get("banqueId")
+      if (bq && bq !== "all" && !Number.isNaN(Number(bq))) {
+        bankIds = await bankUserIds(Number(bq))
+      }
+    }
     const startDate = params.get("startDate") || undefined
     const endDate = params.get("endDate") || undefined
     const userIdParam = params.get("userId") || ""

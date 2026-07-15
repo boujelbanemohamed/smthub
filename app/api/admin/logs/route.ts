@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getLogs, cleanOldLogs, deleteLogsByIds, clearAllLogs } from "@/lib/logger"
 import { requireSuperAdmin, authErrorResponse } from "@/lib/auth"
+import { bankUserIds } from "@/lib/banks-store"
 
 export async function GET(request: NextRequest) {
   try {
@@ -30,7 +31,16 @@ export async function GET(request: NextRequest) {
       endDate,
     }
 
-    const allLogs = await getLogs(filters)
+    let allLogs = await getLogs(filters)
+
+    // Filtre par banque (super-admin) : ne garde que les logs des utilisateurs
+    // de la banque choisie via ?banqueId=.
+    const banqueId = searchParams.get("banqueId")
+    if (banqueId && banqueId !== "all" && !Number.isNaN(Number(banqueId))) {
+      const ids = await bankUserIds(Number(banqueId))
+      allLogs = allLogs.filter((l: any) => typeof l.userId === "number" && ids.has(l.userId))
+    }
+
     const total = allLogs.length
     const logs = allLogs.slice(offset, offset + limit)
     
