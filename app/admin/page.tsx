@@ -160,6 +160,8 @@ export default function AdminPage() {
   const isSuper = !!me && me.role === "admin" && (me.banque_id == null)
   const isBankAdmin = !!me && me.role === "admin" && me.banque_id != null
   const [banks, setBanks] = useState<Bank[]>([])
+  // Nom de la banque de l'admin courant (pour libeller les rôles côté admin de banque)
+  const [myBankName, setMyBankName] = useState<string>("")
   const [users, setUsers] = useState<User[]>([])
   const [applications, setApplications] = useState<Application[]>([])
   const [userAccess, setUserAccess] = useState<UserAccess[]>([])
@@ -302,6 +304,9 @@ export default function AdminPage() {
         // Banques (super-admin uniquement) — pour l'onglet Banques et le formulaire utilisateur.
         if (!iAmBankAdmin) {
           fetch("/api/admin/banks").then((r) => r.ok ? r.json() : []).then(setBanks).catch(() => {})
+        } else {
+          // Admin de banque : on récupère le nom de sa banque pour libeller les rôles.
+          fetch("/api/my-bank").then((r) => r.ok ? r.json() : null).then((b) => setMyBankName(b?.nom || "")).catch(() => {})
         }
 
         // Traitement des réponses en parallèle
@@ -1231,7 +1236,7 @@ export default function AdminPage() {
                         <DialogHeader>
                           <DialogTitle className="text-ink">Créer un nouvel utilisateur</DialogTitle>
                         </DialogHeader>
-                        <UserForm onSubmit={handleCreateUser} banks={banks} isSuper={isSuper} />
+                        <UserForm onSubmit={handleCreateUser} banks={banks} isSuper={isSuper} myBankName={myBankName} />
                       </DialogContent>
                     </Dialog>
                   </div>
@@ -1287,6 +1292,7 @@ export default function AdminPage() {
                               onSubmit={(data) => editingUser && handleUpdateUser(editingUser.id, data)}
                               banks={banks}
                               isSuper={isSuper}
+                              myBankName={myBankName}
                             />
                           </DialogContent>
                         </Dialog>
@@ -2621,7 +2627,7 @@ export default function AdminPage() {
 const USER_AVATAR_COLORS = ["#1877f2", "#42b883", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#64748b"]
 
 // Composant de formulaire pour les utilisateurs
-function UserForm({ user, onSubmit, banks = [], isSuper = false }: { user?: User | null, onSubmit: (data: any) => void, banks?: Bank[], isSuper?: boolean }) {
+function UserForm({ user, onSubmit, banks = [], isSuper = false, myBankName = "" }: { user?: User | null, onSubmit: (data: any) => void, banks?: Bank[], isSuper?: boolean, myBankName?: string }) {
   const [formData, setFormData] = useState({
     nom: user?.nom || "",
     email: user?.email || "",
@@ -2860,12 +2866,13 @@ function UserForm({ user, onSubmit, banks = [], isSuper = false }: { user?: User
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-surface border border-line">
-              <SelectItem value="utilisateur">Utilisateur</SelectItem>
-              <SelectItem value="admin">Administrateur</SelectItem>
+              <SelectItem value="utilisateur">Utilisateur banque{myBankName ? ` · ${myBankName}` : ""}</SelectItem>
+              <SelectItem value="admin">Admin banque{myBankName ? ` · ${myBankName}` : ""}</SelectItem>
             </SelectContent>
           </Select>
           <p className="text-xs text-ink-faint mt-1">
-            « Administrateur » = admin de votre banque (même périmètre que vous).
+            L'utilisateur sera rattaché à votre banque{myBankName ? ` (${myBankName})` : ""}.
+            « Admin banque » = même périmètre d'administration que vous.
           </p>
         </div>
       )}
