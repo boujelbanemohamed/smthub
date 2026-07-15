@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
-import { requireAdmin, authErrorResponse } from "@/lib/auth"
+import { requireSuperAdmin, authErrorResponse } from "@/lib/auth"
 import { toCsv } from "@/lib/csv"
 
 const DATA_FILE = path.join(process.cwd(), "data", "applications.json")
@@ -10,7 +10,7 @@ const DATA_FILE = path.join(process.cwd(), "data", "applications.json")
 // data URI base64 (trop volumineux pour un CSV) ; les URL sont conservées.
 export async function GET() {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     let apps: any[] = []
     try {
       apps = JSON.parse(await fs.readFile(DATA_FILE, "utf-8"))

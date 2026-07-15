@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { logSmtpAction, logError } from "@/lib/logger"
-import { requireAdmin, getCurrentUser, authErrorResponse } from "@/lib/auth"
+import { requireSuperAdmin, getCurrentUser, authErrorResponse } from "@/lib/auth"
 import { promises as fs } from "fs"
 import path from "path"
 
@@ -37,7 +37,7 @@ async function writeSmtpConfig(config: any) {
 
 export async function GET() {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     const config = await readSmtpConfig()
     const { password, ...configWithoutPassword } = config
     return NextResponse.json(configWithoutPassword)
@@ -48,7 +48,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
 
     const newConfig = await request.json()
     

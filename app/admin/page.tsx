@@ -115,6 +115,16 @@ interface User {
   email: string
   role: "admin" | "utilisateur"
   avatar?: string | null
+  banque_id?: number | null
+  actif?: boolean
+}
+
+interface Bank {
+  id: number
+  nom: string
+  actif: boolean
+  app_ids: number[]
+  created_at: string
 }
 
 interface Application {
@@ -144,6 +154,11 @@ export default function AdminPage() {
   // États principaux
   const [loading, setLoading] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  // Utilisateur courant (rôle + banque) : détermine le périmètre de l'admin.
+  const [me, setMe] = useState<{ id: number; role: string; banque_id: number | null } | null>(null)
+  const isSuper = !!me && me.role === "admin" && (me.banque_id == null)
+  const isBankAdmin = !!me && me.role === "admin" && me.banque_id != null
+  const [banks, setBanks] = useState<Bank[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [applications, setApplications] = useState<Application[]>([])
   const [userAccess, setUserAccess] = useState<UserAccess[]>([])
@@ -267,14 +282,25 @@ export default function AdminPage() {
           return
         }
 
+        const currentMe = { id: authData.user.id, role: authData.user.role, banque_id: authData.user.banque_id ?? null }
+        setMe(currentMe)
+        const iAmBankAdmin = currentMe.banque_id != null
+        // Onglet par défaut adapté au rôle (l'admin de banque n'a pas "applications")
+        setActiveTab(iAmBankAdmin ? "users" : "users")
         setIsAuthenticated(true)
 
-        // Chargement parallèle des données critiques
+        // Chargement parallèle des données critiques. `bank-apps` renvoie toutes
+        // les applis pour le super-admin, et seulement celles de la banque pour
+        // un admin de banque.
         const [usersRes, appsRes, accessRes] = await Promise.all([
           fetch("/api/admin/users"),
-          fetch("/api/admin/applications"),
+          fetch("/api/admin/bank-apps"),
           fetch("/api/admin/user-access")
         ])
+        // Banques (super-admin uniquement) — pour l'onglet Banques et le formulaire utilisateur.
+        if (!iAmBankAdmin) {
+          fetch("/api/admin/banks").then((r) => r.ok ? r.json() : []).then(setBanks).catch(() => {})
+        }
 
         // Traitement des réponses en parallèle
         const [usersData, appsData, accessData] = await Promise.all([
@@ -1047,6 +1073,7 @@ export default function AdminPage() {
                 <Users className="w-4 h-4 mr-2" />
                 Utilisateurs
               </TabsTrigger>
+              {isSuper && (
               <TabsTrigger
                 value="applications"
                 className="data-[state=active]:bg-brand data-[state=active]:text-white text-ink font-medium"
@@ -1054,6 +1081,16 @@ export default function AdminPage() {
                 <Settings className="w-4 h-4 mr-2" />
                 Applications
               </TabsTrigger>
+              )}
+              {isSuper && (
+              <TabsTrigger
+                value="banks"
+                className="data-[state=active]:bg-brand data-[state=active]:text-white text-ink font-medium"
+              >
+                <Layers className="w-4 h-4 mr-2" />
+                Banques
+              </TabsTrigger>
+              )}
               <TabsTrigger
                 value="access"
                 className="data-[state=active]:bg-brand data-[state=active]:text-white text-ink font-medium"
@@ -1061,6 +1098,7 @@ export default function AdminPage() {
                 <CheckSquare className="w-4 h-4 mr-2" />
                 Gestion des accès
               </TabsTrigger>
+              {isSuper && (
               <TabsTrigger
                 value="emails"
                 className="data-[state=active]:bg-brand data-[state=active]:text-white text-ink font-medium"
@@ -1068,6 +1106,8 @@ export default function AdminPage() {
                 <Mail className="w-4 h-4 mr-2" />
                 Configuration Emails
               </TabsTrigger>
+              )}
+              {isSuper && (
               <TabsTrigger
                 value="groups"
                 className="data-[state=active]:bg-brand data-[state=active]:text-white text-ink font-medium"
@@ -1075,6 +1115,8 @@ export default function AdminPage() {
                 <Layers className="w-4 h-4 mr-2" />
                 Groupes
               </TabsTrigger>
+              )}
+              {isSuper && (
               <TabsTrigger
                 value="announcements"
                 className="data-[state=active]:bg-brand data-[state=active]:text-white text-ink font-medium"
@@ -1082,6 +1124,7 @@ export default function AdminPage() {
                 <Megaphone className="w-4 h-4 mr-2" />
                 Annonces
               </TabsTrigger>
+              )}
               <TabsTrigger
                 value="stats"
                 className="data-[state=active]:bg-brand data-[state=active]:text-white text-ink font-medium"
@@ -1096,6 +1139,7 @@ export default function AdminPage() {
                 <User className="w-4 h-4 mr-2" />
                 Activité
               </TabsTrigger>
+              {isSuper && (
               <TabsTrigger
                 value="logs"
                 className="data-[state=active]:bg-brand data-[state=active]:text-white text-ink font-medium"
@@ -1103,6 +1147,8 @@ export default function AdminPage() {
                 <Activity className="w-4 h-4 mr-2" />
                 Logs
               </TabsTrigger>
+              )}
+              {isSuper && (
               <TabsTrigger
                 value="backups"
                 className="data-[state=active]:bg-brand data-[state=active]:text-white text-ink font-medium"
@@ -1110,7 +1156,15 @@ export default function AdminPage() {
                 <Save className="w-4 h-4 mr-2" />
                 Sauvegardes
               </TabsTrigger>
+              )}
             </TabsList>
+
+          {/* Banks Tab (super-admin) */}
+          {isSuper && (
+            <TabsContent value="banks" className="space-y-6">
+              <BanksPanel banks={banks} setBanks={setBanks} applications={applications} />
+            </TabsContent>
+          )}
 
           {/* Users Tab */}
           <TabsContent value="users" className="space-y-6">
@@ -1144,7 +1198,7 @@ export default function AdminPage() {
                         <DialogHeader>
                           <DialogTitle className="text-ink">Créer un nouvel utilisateur</DialogTitle>
                         </DialogHeader>
-                        <UserForm onSubmit={handleCreateUser} />
+                        <UserForm onSubmit={handleCreateUser} banks={banks} isSuper={isSuper} />
                       </DialogContent>
                     </Dialog>
                   </div>
@@ -1198,6 +1252,8 @@ export default function AdminPage() {
                             <UserForm
                               user={editingUser}
                               onSubmit={(data) => editingUser && handleUpdateUser(editingUser.id, data)}
+                              banks={banks}
+                              isSuper={isSuper}
                             />
                           </DialogContent>
                         </Dialog>
@@ -2485,12 +2541,14 @@ export default function AdminPage() {
 const USER_AVATAR_COLORS = ["#1877f2", "#42b883", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#64748b"]
 
 // Composant de formulaire pour les utilisateurs
-function UserForm({ user, onSubmit }: { user?: User | null, onSubmit: (data: any) => void }) {
+function UserForm({ user, onSubmit, banks = [], isSuper = false }: { user?: User | null, onSubmit: (data: any) => void, banks?: Bank[], isSuper?: boolean }) {
   const [formData, setFormData] = useState({
     nom: user?.nom || "",
     email: user?.email || "",
     role: user?.role || "utilisateur",
-    mot_de_passe: ""
+    mot_de_passe: "",
+    banque_id: (user?.banque_id ?? null) as number | null,
+    actif: user?.actif !== false,
   })
   const [avatar, setAvatar] = useState<string | null>(user?.avatar ?? null)
   const [uploading, setUploading] = useState(false)
@@ -2504,11 +2562,13 @@ function UserForm({ user, onSubmit }: { user?: User | null, onSubmit: (data: any
         nom: user.nom || "",
         email: user.email || "",
         role: user.role || "utilisateur",
-        mot_de_passe: "" // Ne pas pré-remplir le mot de passe pour la sécurité
+        mot_de_passe: "", // Ne pas pré-remplir le mot de passe pour la sécurité
+        banque_id: user.banque_id ?? null,
+        actif: user.actif !== false,
       })
       setAvatar(user.avatar ?? null)
     } else {
-      setFormData({ nom: "", email: "", role: "utilisateur", mot_de_passe: "" })
+      setFormData({ nom: "", email: "", role: "utilisateur", mot_de_passe: "", banque_id: null, actif: true })
       setAvatar(null)
     }
   }, [user])
@@ -2544,9 +2604,12 @@ function UserForm({ user, onSubmit }: { user?: User | null, onSubmit: (data: any
       ? { nom: formData.nom, email: formData.email, role: formData.role }
       : { ...formData }
     base.avatar = avatar
+    base.actif = formData.actif
+    // La banque n'est modifiable que par le super-admin.
+    if (isSuper) base.banque_id = formData.banque_id
     onSubmit(base)
     if (!user) {
-      setFormData({ nom: "", email: "", role: "utilisateur", mot_de_passe: "" })
+      setFormData({ nom: "", email: "", role: "utilisateur", mot_de_passe: "", banque_id: null, actif: true })
       setAvatar(null)
     }
   }
@@ -2637,7 +2700,39 @@ function UserForm({ user, onSubmit }: { user?: User | null, onSubmit: (data: any
             <SelectItem value="admin">Administrateur</SelectItem>
           </SelectContent>
         </Select>
+        <p className="text-xs text-ink-faint mt-1">
+          « Administrateur » dans une banque = admin de cette banque (périmètre limité à sa banque).
+        </p>
       </div>
+
+      {/* Banque : réservé au super-admin */}
+      {isSuper ? (
+        <div>
+          <Label htmlFor="banque_id" className="text-ink font-medium">Banque</Label>
+          <select
+            id="banque_id"
+            value={formData.banque_id ?? ""}
+            onChange={(e) => setFormData({ ...formData, banque_id: e.target.value === "" ? null : Number(e.target.value) })}
+            className="w-full px-3 py-2 border border-line rounded-md bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-brand"
+          >
+            <option value="">— Aucune (utilisateur global) —</option>
+            {banks.map((b) => (
+              <option key={b.id} value={b.id}>{b.nom}{b.actif ? "" : " (désactivée)"}</option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
+      {/* Statut du compte */}
+      <div>
+        <label className="flex items-center gap-2 text-sm text-ink">
+          <input type="checkbox" checked={formData.actif}
+            onChange={(e) => setFormData({ ...formData, actif: e.target.checked })}
+            className="h-4 w-4 accent-[var(--brand,#1877f2)]" />
+          Compte actif (décochez pour désactiver la connexion)
+        </label>
+      </div>
+
       <Button type="submit" className="w-full bg-brand hover:bg-brand-hover text-white">
         {user ? "Mettre à jour" : "Créer"}
       </Button>
@@ -2939,6 +3034,153 @@ function AppCodeManager({ appId, appName }: { appId: number; appName: string }) 
         ) : null}
       </DialogContent>
     </Dialog>
+  )
+}
+
+// Panneau d'administration des banques (super-admin) : créer une banque,
+// activer/désactiver, supprimer, et attribuer des applications à chaque banque.
+function BanksPanel({ banks, setBanks, applications }: { banks: Bank[]; setBanks: (b: Bank[]) => void; applications: Application[] }) {
+  const [newName, setNewName] = useState("")
+  const [error, setError] = useState("")
+  const [editId, setEditId] = useState<number | null>(null)
+  const [editName, setEditName] = useState("")
+  const [expanded, setExpanded] = useState<number | null>(null)
+
+  const reload = async () => {
+    const res = await fetch("/api/admin/banks")
+    if (res.ok) setBanks(await res.json())
+  }
+
+  const create = async () => {
+    setError("")
+    const nom = newName.trim()
+    if (!nom) return
+    const res = await fetch("/api/admin/banks", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nom }),
+    })
+    if (res.ok) { setNewName(""); await reload() }
+    else { const d = await res.json().catch(() => ({})); setError(d.error || "Erreur") }
+  }
+
+  const rename = async (id: number) => {
+    const nom = editName.trim()
+    if (!nom) return
+    const res = await fetch(`/api/admin/banks/${id}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nom }),
+    })
+    if (res.ok) { setEditId(null); setEditName(""); await reload() }
+    else { const d = await res.json().catch(() => ({})); setError(d.error || "Erreur") }
+  }
+
+  const toggleActif = async (b: Bank) => {
+    if (b.actif && !confirm(`Désactiver la banque « ${b.nom} » ? Ses utilisateurs seront désactivés, détachés, et les admins repasseront utilisateurs.`)) return
+    const res = await fetch(`/api/admin/banks/${b.id}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actif: !b.actif }),
+    })
+    if (res.ok) await reload()
+  }
+
+  const remove = async (b: Bank) => {
+    if (!confirm(`Supprimer la banque « ${b.nom} » ? Ses utilisateurs seront désactivés et détachés (admins → utilisateurs).`)) return
+    const res = await fetch(`/api/admin/banks/${b.id}`, { method: "DELETE" })
+    if (res.ok) await reload()
+  }
+
+  const toggleApp = async (b: Bank, appId: number) => {
+    const has = b.app_ids.includes(appId)
+    const next = has ? b.app_ids.filter((x) => x !== appId) : [...b.app_ids, appId]
+    const res = await fetch(`/api/admin/banks/${b.id}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ app_ids: next }),
+    })
+    if (res.ok) await reload()
+  }
+
+  return (
+    <Card className="bg-surface border border-line shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)]">
+      <CardHeader>
+        <CardTitle className="text-ink">Banques</CardTitle>
+        <p className="text-sm text-ink-muted">
+          Créez les banques, attribuez-leur des applications, et gérez leur état. L'admin d'une banque
+          ne pourra donner accès qu'aux applications attribuées ici.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input value={newName} onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); create() } }}
+            placeholder="Nom de la banque…" className="max-w-xs bg-surface border-line text-ink" />
+          <Button onClick={create} className="bg-brand hover:bg-brand-hover text-white">
+            <Plus className="w-4 h-4 mr-2" /> Ajouter
+          </Button>
+        </div>
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+        {banks.length === 0 ? (
+          <p className="text-sm text-ink-muted">Aucune banque pour l'instant.</p>
+        ) : (
+          <ul className="space-y-2">
+            {banks.map((b) => (
+              <li key={b.id} className="border border-line rounded-md p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {editId === b.id ? (
+                      <>
+                        <Input value={editName} autoFocus onChange={(e) => setEditName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); rename(b.id) } if (e.key === "Escape") setEditId(null) }}
+                          className="h-8 w-48 bg-surface border-line text-ink text-sm" />
+                        <button onClick={() => rename(b.id)} className="text-green-600 text-sm font-medium px-1">OK</button>
+                        <button onClick={() => setEditId(null)} className="text-ink-muted px-1"><X className="w-4 h-4" /></button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-medium text-ink truncate">{b.nom}</span>
+                        {b.actif
+                          ? <span className="text-[11px] rounded-full bg-green-100 text-green-700 px-2 py-0.5">Active</span>
+                          : <span className="text-[11px] rounded-full bg-red-100 text-red-700 px-2 py-0.5">Désactivée</span>}
+                        <span className="text-xs text-ink-faint">· {b.app_ids.length} appli(s)</span>
+                      </>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => setExpanded(expanded === b.id ? null : b.id)} className="text-xs text-brand px-2 py-1 border border-line rounded-md hover:bg-app">
+                      Applications
+                    </button>
+                    <button onClick={() => { setEditId(b.id); setEditName(b.nom) }} className="p-1.5 text-ink-muted hover:text-brand" title="Renommer"><Edit className="w-4 h-4" /></button>
+                    <button onClick={() => toggleActif(b)} className="p-1.5 text-ink-muted hover:text-amber-600" title={b.actif ? "Désactiver" : "Activer"}>
+                      {b.actif ? <Square className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}
+                    </button>
+                    <button onClick={() => remove(b)} className="p-1.5 text-ink-muted hover:text-red-600" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                </div>
+
+                {expanded === b.id ? (
+                  <div className="mt-3 border-t border-line pt-3">
+                    <p className="text-xs text-ink-muted mb-2">Applications attribuées à cette banque :</p>
+                    {applications.length === 0 ? (
+                      <p className="text-xs text-ink-faint">Aucune application disponible.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
+                        {applications.map((app) => (
+                          <label key={app.id} className="flex items-center gap-2 text-sm text-ink">
+                            <input type="checkbox" checked={b.app_ids.includes(app.id)}
+                              onChange={() => toggleApp(b, app.id)} className="h-4 w-4 accent-[var(--brand,#1877f2)]" />
+                            {app.nom}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 

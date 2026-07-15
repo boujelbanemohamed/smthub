@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAdmin, getCurrentUser } from "@/lib/auth"
+import { requireAdmin, requireSuperAdmin, getCurrentUser } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import {
   type AccessHistoryEntry,
@@ -11,7 +11,7 @@ import {
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get("user_id")
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     
     const { searchParams } = new URL(request.url)
     const days = parseInt(searchParams.get("older_than_days") || "0")

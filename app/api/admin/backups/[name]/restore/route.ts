@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAdmin, verifyCurrentUserPassword } from "@/lib/auth"
+import { requireSuperAdmin, verifyCurrentUserPassword } from "@/lib/auth"
 import { resolveBackup, restoreFromArchive } from "@/lib/backup-store"
 import { logAction, logError } from "@/lib/logger"
 
@@ -7,7 +7,7 @@ import { logAction, logError } from "@/lib/logger"
 // requis). ⚠️ Remplace les données actuelles, après une copie de sécurité.
 export async function POST(request: NextRequest, { params }: { params: Promise<{ name: string }> }) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
     const body = await request.json().catch(() => ({}))
     if (!(await verifyCurrentUserPassword(body?.password))) {
       return NextResponse.json({ error: "Mot de passe incorrect" }, { status: 401 })

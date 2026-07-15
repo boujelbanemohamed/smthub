@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth"
+import { requireAdmin, isBankAdmin } from "@/lib/auth"
+import { getBank, bankUserIds } from "@/lib/banks-store"
 import { logAccessAction, logError } from "@/lib/logger"
 import { promises as fs } from "fs"
 import path from "path"
@@ -49,8 +50,13 @@ async function getApplicationById(appId: number) {
 
 export async function GET() {
   try {
-    await requireAdmin()
-    const userAccess = await readUserAccess()
+    const me = await requireAdmin()
+    let userAccess = await readUserAccess()
+    // Cloisonnement : un admin de banque ne voit que les accès de ses utilisateurs.
+    if (isBankAdmin(me)) {
+      const ids = await bankUserIds(me.banque_id!)
+      userAccess = userAccess.filter((a: any) => ids.has(a.utilisateur_id))
+    }
     return NextResponse.json(userAccess)
   } catch (error) {
     if (error instanceof Error && (error.message === "Admin access required" || error.message === "Authentication required")) {
@@ -60,11 +66,25 @@ export async function GET() {
   }
 }
 
+// Vérifie qu'un admin de banque a le droit d'agir sur ce couple (utilisateur,
+// application) : l'utilisateur doit être de sa banque ET l'application doit
+// être attribuée à sa banque. Renvoie un message d'erreur, ou null si OK.
+async function bankScopeError(me: any, utilisateurId: number, applicationId: number): Promise<string | null> {
+  if (!isBankAdmin(me)) return null
+  const user = await getUserById(utilisateurId)
+  if (!user || user.banque_id !== me.banque_id) return "Utilisateur hors de votre banque"
+  const bank = await getBank(me.banque_id)
+  if (!bank || !bank.app_ids.includes(Number(applicationId))) return "Application non attribuée à votre banque"
+  return null
+}
+
 export async function POST(request: NextRequest) {
   try {
-    await requireAdmin()
+    const me = await requireAdmin()
 
     const { utilisateur_id, application_id } = await request.json()
+    const scopeErr = await bankScopeError(me, Number(utilisateur_id), Number(application_id))
+    if (scopeErr) return NextResponse.json({ error: scopeErr }, { status: 403 })
     const userAccess = await readUserAccess()
 
     const existingAccess = userAccess.find(
@@ -115,9 +135,11 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    await requireAdmin()
+    const me = await requireAdmin()
 
     const { utilisateur_id, application_id } = await request.json()
+    const scopeErr = await bankScopeError(me, Number(utilisateur_id), Number(application_id))
+    if (scopeErr) return NextResponse.json({ error: scopeErr }, { status: 403 })
     const userAccess = await readUserAccess()
 
     const existingAccess = userAccess.find(

@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
-import { requireAdmin, authErrorResponse } from "@/lib/auth"
+import { requireSuperAdmin, authErrorResponse } from "@/lib/auth"
 import { logAccessAction } from "@/lib/logger"
 
 const ACCESS_FILE = path.join(process.cwd(), "data", "user_access.json")
@@ -29,7 +29,7 @@ async function writeAccess(items: Access[]) {
 // d'utilisateurs — « donner accès à un lot d'apps à un groupe d'utilisateurs ».
 export async function POST(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
     const { user_ids, application_ids, action } = await request.json()
 
     if (!Array.isArray(user_ids) || !Array.isArray(application_ids) || user_ids.length === 0 || application_ids.length === 0) {

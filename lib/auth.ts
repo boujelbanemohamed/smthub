@@ -15,7 +15,7 @@ export function authErrorResponse(error: unknown): NextResponse | null {
   if (error instanceof Error && error.message === "Authentication required") {
     return NextResponse.json({ error: "Non authentifié" }, { status: 401 })
   }
-  if (error instanceof Error && error.message === "Admin access required") {
+  if (error instanceof Error && (error.message === "Admin access required" || error.message === "Super admin required")) {
     return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 })
   }
   return null
@@ -28,6 +28,10 @@ interface User {
   mot_de_passe: string
   role: "admin" | "utilisateur"
   avatar?: string | null
+  // Multi-banques : rattachement à une banque (null = non rattaché) et statut
+  // du compte (false = désactivé, ne peut plus se connecter).
+  banque_id?: number | null
+  actif?: boolean
 }
 
 const USERS_FILE = path.join(process.cwd(), "data", "users.json")
@@ -60,16 +64,35 @@ export async function getCurrentUser(): Promise<User | null> {
       return null
     }
 
+    // Compte désactivé → on invalide la session immédiatement.
+    if ((user as User).actif === false) {
+      await clearSession()
+      return null
+    }
+
     return {
       id: user.id,
       nom: user.nom,
       email: user.email,
       role: user.role,
-      avatar: (user as User).avatar ?? null
+      avatar: (user as User).avatar ?? null,
+      banque_id: (user as User).banque_id ?? null,
+      actif: (user as User).actif !== false, // absent → considéré actif
     } as User
   } catch {
     return null
   }
+}
+
+/**
+ * Un super-admin est un admin SANS banque (global). Un admin AVEC banque est un
+ * « admin de banque » (périmètre limité à sa banque).
+ */
+export function isSuperAdmin(user: { role: string; banque_id?: number | null } | null | undefined): boolean {
+  return !!user && user.role === "admin" && (user.banque_id == null)
+}
+export function isBankAdmin(user: { role: string; banque_id?: number | null } | null | undefined): boolean {
+  return !!user && user.role === "admin" && user.banque_id != null
 }
 
 /**
@@ -105,6 +128,21 @@ export async function requireAuth(): Promise<User> {
 export async function requireAdmin(): Promise<User> {
   const user = await requireAuth()
   if (user.role !== "admin") {
+    throw new Error("Admin access required")
+  }
+  return user
+}
+
+/**
+ * Exige un SUPER-admin (admin global, sans banque). Les admins de banque sont
+ * refusés — sert à protéger les fonctions réservées au super-admin
+ * (applications, catégories, sauvegardes, banques, logs complets…).
+ */
+export async function requireSuperAdmin(): Promise<User> {
+  const user = await requireAdmin()
+  if (user.banque_id != null) {
+    // On réutilise le message standard "Admin access required" pour que tous
+    // les gestionnaires d'erreur existants renvoient bien un 403 (accès refusé).
     throw new Error("Admin access required")
   }
   return user

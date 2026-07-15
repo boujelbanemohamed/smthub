@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
-import { getCurrentUser } from "@/lib/auth"
+import { getCurrentUser, isBankAdmin } from "@/lib/auth"
+import { bankUserIds } from "@/lib/banks-store"
 
 const LOGS_FILE = path.join(process.cwd(), "data", "admin-logs.json")
 
@@ -20,7 +21,17 @@ export async function GET() {
       logs = []
     }
 
-    const scope = user.role === "admin" ? logs : logs.filter((l) => l.userId === user.id)
+    // Périmètre :
+    //  - super-admin       → global (toutes banques)
+    //  - admin de banque   → uniquement les utilisateurs de sa banque
+    //  - utilisateur       → uniquement ses propres ouvertures
+    let scope = logs
+    if (isBankAdmin(user)) {
+      const ids = await bankUserIds(user.banque_id!)
+      scope = logs.filter((l) => typeof l.userId === "number" && ids.has(l.userId))
+    } else if (user.role !== "admin") {
+      scope = logs.filter((l) => l.userId === user.id)
+    }
     const opens = scope.filter((l) => l.action === "Ouverture application")
 
     const byApp = new Map<string, { appId: number; nom: string; count: number }>()

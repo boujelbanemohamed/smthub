@@ -76,6 +76,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Compte désactivé (ex. banque supprimée/désactivée) → connexion refusée.
+    if (user.actif === false) {
+      await logError("Login", `Echec connexion (compte désactivé): ${email}`, "Compte désactivé", user?.id, user?.nom)
+      return NextResponse.json(
+        { error: "Votre compte est désactivé. Veuillez contacter l'administrateur." },
+        { status: 403 }
+      )
+    }
+
     // Créer une session
     const sessionData = {
       id: user.id,

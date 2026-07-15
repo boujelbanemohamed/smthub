@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
-import { requireAdmin, authErrorResponse } from "@/lib/auth"
+import { requireSuperAdmin, authErrorResponse } from "@/lib/auth"
 import { parseCsv } from "@/lib/csv"
 import { logApplicationAction } from "@/lib/logger"
 
@@ -20,7 +20,7 @@ interface Application {
 // POST { csv } → importe des applications. Colonnes : nom,app_url[,image_url,ordre_affichage]
 export async function POST(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
     const { csv } = await request.json()
     if (typeof csv !== "string" || !csv.trim()) {
       return NextResponse.json({ error: "Fichier CSV vide" }, { status: 400 })

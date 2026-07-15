@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth"
+import { requireSuperAdmin } from "@/lib/auth"
 import { promises as fs } from "fs"
 import path from "path"
 import { logApplicationAction, logError } from "@/lib/logger"
@@ -42,7 +42,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
 
     const appId = parseInt((await params).id)
     const appData = await request.json()
@@ -86,7 +86,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
 
     const appId = parseInt((await params).id)
     const applications = await readApplications()

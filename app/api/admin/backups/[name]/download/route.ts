@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { promises as fs } from "fs"
-import { requireAdmin, verifyCurrentUserPassword } from "@/lib/auth"
+import { requireSuperAdmin, verifyCurrentUserPassword } from "@/lib/auth"
 import { resolveBackup } from "@/lib/backup-store"
 import { logAction } from "@/lib/logger"
 
@@ -8,7 +8,7 @@ import { logAction } from "@/lib/logger"
 // Mot de passe requis : l'archive contient des données sensibles et les secrets.
 export async function POST(request: NextRequest, { params }: { params: Promise<{ name: string }> }) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
     const body = await request.json().catch(() => ({}))
     if (!(await verifyCurrentUserPassword(body?.password))) {
       return NextResponse.json({ error: "Mot de passe incorrect" }, { status: 401 })

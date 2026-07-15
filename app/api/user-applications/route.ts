@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
-import { getCurrentUser } from "@/lib/auth"
+import { getCurrentUser, isSuperAdmin, isBankAdmin } from "@/lib/auth"
+import { getBank } from "@/lib/banks-store"
 
 const APPLICATIONS_FILE = path.join(process.cwd(), "data", "applications.json")
 const ACCESS_FILE = path.join(process.cwd(), "data", "user_access.json")
@@ -46,13 +47,24 @@ export async function GET() {
 
     const [applications, userAccess] = await Promise.all([readApplications(), readUserAccess()])
 
-    // Si l'utilisateur est admin, il a accès à toutes les applications
-    if (currentUser.role === "admin") {
+    // Super-admin (admin sans banque) → toutes les applications.
+    if (isSuperAdmin(currentUser)) {
       const sortedApps = applications.sort((a, b) => a.ordre_affichage - b.ordre_affichage)
       return NextResponse.json(sortedApps)
     }
 
-    // Pour les utilisateurs standards, filtrer selon leurs droits d'accès
+    // Admin de banque → uniquement les applications attribuées à sa banque par
+    // le super-admin (et non toutes les applications).
+    if (isBankAdmin(currentUser)) {
+      const bank = await getBank(currentUser.banque_id as number)
+      const allowed = new Set(bank?.app_ids || [])
+      const bankApps = applications
+        .filter((app) => allowed.has(app.id))
+        .sort((a, b) => a.ordre_affichage - b.ordre_affichage)
+      return NextResponse.json(bankApps)
+    }
+
+    // Utilisateurs standards → uniquement leurs droits d'accès individuels.
     const userAppIds = userAccess
       .filter((access) => access.utilisateur_id === currentUser.id)
       .map((access) => access.application_id)

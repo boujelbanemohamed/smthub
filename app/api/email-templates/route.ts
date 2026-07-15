@@ -1,11 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getEmailTemplates, saveEmailTemplates, getTemplateById, updateTemplate, updateSettings } from "@/lib/email-templates"
-import { requireAdmin, getCurrentUser, authErrorResponse } from "@/lib/auth"
+import { requireSuperAdmin, getCurrentUser, authErrorResponse } from "@/lib/auth"
 import { logTemplateAction, logError } from "@/lib/logger"
 
 export async function GET() {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     const config = await getEmailTemplates()
     return NextResponse.json(config)
   } catch (error) {
@@ -15,7 +15,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAdmin() // Seuls les admins peuvent modifier les templates
+    await requireSuperAdmin() // Seuls les admins peuvent modifier les templates
     
     const body = await request.json()
     const { action, data } = body

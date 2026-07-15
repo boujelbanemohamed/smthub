@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import nodemailer from "nodemailer"
 import { logSmtpAction, logError } from "@/lib/logger"
-import { getCurrentUser } from "@/lib/auth"
+import { getCurrentUser, isSuperAdmin } from "@/lib/auth"
 
 export async function POST(request: NextRequest) {
   let smtpConfig: any
   try {
     const currentUser = await getCurrentUser()
-    if (!currentUser || currentUser.role !== "admin") {
+    if (!isSuperAdmin(currentUser)) {
       return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 })
     }
 
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Logger l'action (on récupère l'admin depuis la session)
-    const adminName = currentUser.nom || "Administrateur"
+    const adminName = currentUser?.nom || "Administrateur"
 
     await logSmtpAction(
       "Test SMTP",

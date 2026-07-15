@@ -1,8 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
-import { requireAdmin, authErrorResponse } from "@/lib/auth"
+import { requireAdmin, requireSuperAdmin, authErrorResponse, isBankAdmin } from "@/lib/auth"
 import { deleteLogsByIds } from "@/lib/logger"
+import { bankUserIds } from "@/lib/banks-store"
 
 const LOGS_FILE = path.join(process.cwd(), "data", "admin-logs.json")
 
@@ -33,7 +34,7 @@ const MODIFICATION_ACTIONS = [
 //   - modifications : changements de compte (mot de passe, avatar, etc.)
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin()
+    const me = await requireAdmin()
     const params = new URL(request.url).searchParams
     // userId = "all" (ou vide) → tous les utilisateurs ; sinon un id numérique.
     const userIdParam = params.get("userId") || ""
@@ -42,12 +43,29 @@ export async function GET(request: NextRequest) {
     if (!allUsers && Number.isNaN(userId)) {
       return NextResponse.json({ error: "userId invalide" }, { status: 400 })
     }
+
+    // Cloisonnement : un admin de banque ne consulte que les utilisateurs de sa
+    // banque. Cible précise hors banque → refus ; sinon on borne aux ids banque.
+    const bankIds = isBankAdmin(me) ? await bankUserIds(me.banque_id!) : null
+    if (bankIds && !allUsers && !bankIds.has(userId)) {
+      return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 })
+    }
     // Fenêtre temporelle facultative : ?hours=48 → dernières 48 h (popup),
     // ou ?startDate / ?endDate (section admin, filtre par date).
     const hours = params.get("hours") ? parseInt(params.get("hours")!) : 0
-    const sinceTs = hours > 0 ? Date.now() - hours * 3600 * 1000 : 0
-    const startDate = params.get("startDate") || undefined
-    const endDate = params.get("endDate") || undefined
+    let sinceTs = hours > 0 ? Date.now() - hours * 3600 * 1000 : 0
+    let startDate = params.get("startDate") || undefined
+    let endDate = params.get("endDate") || undefined
+
+    // Cloisonnement temporel : un admin de banque ne peut JAMAIS remonter au-delà
+    // de 48 h, quels que soient les paramètres reçus. On force la fenêtre et on
+    // ignore tout filtre de dates plus large.
+    if (bankIds) {
+      const min48 = Date.now() - 48 * 3600 * 1000
+      sinceTs = sinceTs === 0 ? min48 : Math.max(sinceTs, min48)
+      startDate = undefined
+      endDate = undefined
+    }
     // Pagination des modifications
     const limit = params.get("limit") ? Math.max(1, parseInt(params.get("limit")!)) : 10
     const offset = params.get("offset") ? Math.max(0, parseInt(params.get("offset")!)) : 0
@@ -62,6 +80,7 @@ export async function GET(request: NextRequest) {
     const mine = logs.filter(
       (l) =>
         (allUsers || l.userId === userId) &&
+        (bankIds === null || (typeof l.userId === "number" && bankIds.has(l.userId))) &&
         (sinceTs === 0 || new Date(l.timestamp).getTime() >= sinceTs) &&
         inRange(l.timestamp, startDate, endDate)
     )
@@ -103,7 +122,8 @@ export async function GET(request: NextRequest) {
 //        l'utilisateur (dans la fenêtre de dates si fournie)
 export async function DELETE(request: NextRequest) {
   try {
-    await requireAdmin()
+    // La suppression d'activité/logs est réservée au super-admin.
+    await requireSuperAdmin()
     const body = await request.json().catch(() => ({}))
 
     // 1) Suppression de lignes précises par id

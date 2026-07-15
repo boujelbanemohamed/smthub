@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
-import { requireAdmin, getCurrentUser } from "@/lib/auth"
+import { requireSuperAdmin, getCurrentUser } from "@/lib/auth"
 import { logAccessChange } from "@/lib/access-history"
 import { sendEmail, generateAccessChangeEmail } from "@/lib/email-service"
 
@@ -61,7 +61,7 @@ async function getApplicationById(appId: number) {
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get("user_id")
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
 
     const { utilisateur_id, application_id, access_level } = await request.json()
 
@@ -222,7 +222,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get("user_id")

@@ -1,12 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth"
+import { requireSuperAdmin } from "@/lib/auth"
 import { listCategories, addCategory } from "@/lib/categories-store"
 import { logAction } from "@/lib/logger"
 
 // GET → liste des catégories (admin)
 export async function GET() {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     const items = await listCategories()
     return NextResponse.json(items)
   } catch (error) {
@@ -20,7 +20,7 @@ export async function GET() {
 // POST { name } → ajoute une catégorie (admin)
 export async function POST(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
     const { name } = await request.json()
     const result = await addCategory(typeof name === "string" ? name : "")
     if ("error" in result) return NextResponse.json({ error: result.error }, { status: 400 })

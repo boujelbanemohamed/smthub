@@ -1,10 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { generateEmailFromTemplate } from "@/lib/email-templates"
-import { requireAdmin, authErrorResponse } from "@/lib/auth"
+import { requireSuperAdmin, authErrorResponse } from "@/lib/auth"
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAdmin() // Seuls les admins peuvent tester les templates
+    await requireSuperAdmin() // Seuls les admins peuvent tester les templates
     
     const { templateId, testEmail } = await request.json()
 

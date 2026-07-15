@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
-import { requireAdmin } from "@/lib/auth"
+import { requireSuperAdmin } from "@/lib/auth"
 
 const SMTP_CONFIG_FILE = path.join(process.cwd(), "data", "smtp-config.json")
 
@@ -48,7 +48,7 @@ async function writeSmtpConfig(config: SmtpConfig) {
 
 export async function GET() {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     const config = await readSmtpConfig()
     
     // Don't send the password in the response for security
@@ -67,7 +67,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     
     const body = await request.json()
     const { host, port, secure, user, password, from_name, from_email, enabled } = body

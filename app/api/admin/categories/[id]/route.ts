@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth"
+import { requireSuperAdmin } from "@/lib/auth"
 import { renameCategory, deleteCategory } from "@/lib/categories-store"
 import { logAction } from "@/lib/logger"
 
@@ -7,7 +7,7 @@ import { logAction } from "@/lib/logger"
 // sur les applications qui l'utilisaient.
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
     const { name } = await request.json()
     const result = await renameCategory((await params).id, typeof name === "string" ? name : "")
     if ("error" in result) {
@@ -28,7 +28,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 // remises à « sans catégorie ».
 export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
     const result = await deleteCategory((await params).id)
     if (!result.ok) return NextResponse.json({ error: "Catégorie introuvable" }, { status: 404 })
     await logAction("Suppression catégorie", `Catégorie supprimée (${(await params).id})`, "INFO", admin.id, admin.nom)

@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth"
+import { requireSuperAdmin } from "@/lib/auth"
 import { getBackupConfig, saveBackupConfig, sanitizeConfig } from "@/lib/backup-config"
 import { logAction } from "@/lib/logger"
 
@@ -10,7 +10,7 @@ function unauthorized(error: unknown) {
 // GET → configuration de la sauvegarde automatique (admin)
 export async function GET() {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     return NextResponse.json(await getBackupConfig())
   } catch (error) {
     if (unauthorized(error)) return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 })
@@ -21,7 +21,7 @@ export async function GET() {
 // PUT → met à jour la planification (admin)
 export async function PUT(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
     const body = await request.json().catch(() => ({}))
     const previous = await getBackupConfig()
     const next = sanitizeConfig(body, previous)

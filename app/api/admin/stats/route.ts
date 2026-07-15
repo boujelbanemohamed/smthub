@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
-import { requireAdmin, authErrorResponse } from "@/lib/auth"
+import { requireAdmin, authErrorResponse, isBankAdmin } from "@/lib/auth"
+import { bankUserIds } from "@/lib/banks-store"
 
 const LOGS_FILE = path.join(process.cwd(), "data", "admin-logs.json")
 
@@ -25,7 +26,9 @@ function inRange(ts: string, startDate?: string | null, endDate?: string | null)
 // Filtres facultatifs : ?startDate, ?endDate, ?userId
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin()
+    const me = await requireAdmin()
+    // Cloisonnement : un admin de banque ne voit que les stats de sa banque.
+    const bankIds = isBankAdmin(me) ? await bankUserIds(me.banque_id!) : null
     const params = new URL(request.url).searchParams
     const startDate = params.get("startDate") || undefined
     const endDate = params.get("endDate") || undefined
@@ -43,7 +46,8 @@ export async function GET(request: NextRequest) {
       (l) =>
         l.action === "Ouverture application" &&
         inRange(l.timestamp, startDate, endDate) &&
-        (userId === null || l.userId === userId)
+        (userId === null || l.userId === userId) &&
+        (bankIds === null || (typeof l.userId === "number" && bankIds.has(l.userId)))
     )
 
     const byApp = new Map<string, { appId: number; nom: string; count: number }>()

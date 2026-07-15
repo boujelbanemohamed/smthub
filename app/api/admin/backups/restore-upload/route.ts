@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
 import os from "os"
-import { requireAdmin, verifyCurrentUserPassword } from "@/lib/auth"
+import { requireSuperAdmin, verifyCurrentUserPassword } from "@/lib/auth"
 import { restoreFromArchive } from "@/lib/backup-store"
 import { logAction, logError } from "@/lib/logger"
 
@@ -14,7 +14,7 @@ const MAX_UPLOAD = 200 * 1024 * 1024 // 200 Mo
 export async function POST(request: NextRequest) {
   let temp: string | null = null
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
     const form = await request.formData()
     const password = String(form.get("password") || "")
     if (!(await verifyCurrentUserPassword(password))) {

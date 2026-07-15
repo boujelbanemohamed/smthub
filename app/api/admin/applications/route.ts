@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth"
+import { requireSuperAdmin } from "@/lib/auth"
 import { promises as fs } from "fs"
 import path from "path"
 import { logApplicationAction, logError } from "@/lib/logger"
@@ -38,7 +38,7 @@ async function writeApplications(applications: Application[]) {
 
 export async function GET() {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     const applications = await readApplications()
     return NextResponse.json(applications.sort((a, b) => a.ordre_affichage - b.ordre_affichage))
   } catch (error) {
@@ -54,7 +54,7 @@ export async function GET() {
 // opération pour éviter les races de lecture/écriture concurrentes sur le fichier.
 export async function PATCH(request: NextRequest) {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     const { order } = await request.json()
     if (!Array.isArray(order)) {
       return NextResponse.json({ error: "Paramètre 'order' invalide" }, { status: 400 })
@@ -84,7 +84,7 @@ export async function PATCH(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
 
     const appData = await request.json()
 

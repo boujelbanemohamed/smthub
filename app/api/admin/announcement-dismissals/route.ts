@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
-import { requireAdmin, authErrorResponse } from "@/lib/auth"
+import { requireSuperAdmin, authErrorResponse } from "@/lib/auth"
 import { listAnnouncements } from "@/lib/announcements-store"
 import { listDismissals } from "@/lib/announcement-dismissals-store"
 
 // GET → pour chaque annonce FERMABLE, la liste des utilisateurs qui l'ont fermée.
 export async function GET() {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     const [anns, dismissals] = await Promise.all([listAnnouncements(), listDismissals()])
 
     const rows = anns

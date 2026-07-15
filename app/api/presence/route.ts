@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
-import { getCurrentUser, requireAdmin, authErrorResponse } from "@/lib/auth"
+import { getCurrentUser, requireAdmin, authErrorResponse, isBankAdmin } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { touchPresence, getPresenceMap, isConnected, getLastLoginMap } from "@/lib/presence-store"
 
@@ -37,8 +37,12 @@ export async function POST() {
 // GET → (admin) liste des utilisateurs connectés et non connectés.
 export async function GET() {
   try {
-    await requireAdmin()
-    const [users, presence, lastLogin] = await Promise.all([readAllUsers(), getPresenceMap(), getLastLoginMap()])
+    const me = await requireAdmin()
+    let [users, presence, lastLogin] = await Promise.all([readAllUsers(), getPresenceMap(), getLastLoginMap()])
+    // Cloisonnement : un admin de banque ne voit que les utilisateurs de sa banque.
+    if (isBankAdmin(me)) {
+      users = users.filter((u: any) => u.banque_id === me.banque_id)
+    }
     const now = Date.now()
 
     const connected: any[] = []

@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAdmin, verifyCurrentUserPassword } from "@/lib/auth"
+import { requireSuperAdmin, verifyCurrentUserPassword } from "@/lib/auth"
 import { listBackups, createBackup } from "@/lib/backup-store"
 import { logAction, logError } from "@/lib/logger"
 
@@ -10,7 +10,7 @@ function unauthorized(error: unknown) {
 // GET → liste des sauvegardes disponibles (admin)
 export async function GET() {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     return NextResponse.json(await listBackups())
   } catch (error) {
     if (unauthorized(error)) return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 })
@@ -21,7 +21,7 @@ export async function GET() {
 // POST { password } → crée une sauvegarde à la demande (admin, mot de passe requis)
 export async function POST(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
     const body = await request.json().catch(() => ({}))
     if (!(await verifyCurrentUserPassword(body?.password))) {
       return NextResponse.json({ error: "Mot de passe incorrect" }, { status: 401 })

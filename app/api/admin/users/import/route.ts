@@ -3,7 +3,7 @@ import { promises as fs } from "fs"
 import path from "path"
 import bcrypt from "bcryptjs"
 import crypto from "crypto"
-import { requireAdmin, authErrorResponse, isValidEmail } from "@/lib/auth"
+import { requireSuperAdmin, authErrorResponse, isValidEmail } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { parseCsv } from "@/lib/csv"
 import { logUserAction } from "@/lib/logger"
@@ -23,7 +23,7 @@ interface User {
 // Un mot de passe vide → mot de passe aléatoire (à réinitialiser ensuite).
 export async function POST(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
     const { csv } = await request.json()
     if (typeof csv !== "string" || !csv.trim()) {
       return NextResponse.json({ error: "Fichier CSV vide" }, { status: 400 })

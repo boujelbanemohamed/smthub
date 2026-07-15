@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAdmin, verifyCurrentUserPassword } from "@/lib/auth"
+import { requireSuperAdmin, verifyCurrentUserPassword } from "@/lib/auth"
 import { deleteDeposit } from "@/lib/app-code-store"
 import { logApplicationAction } from "@/lib/logger"
 
@@ -7,7 +7,7 @@ import { logApplicationAction } from "@/lib/logger"
 // Exige une reconfirmation du mot de passe de l'administrateur connecté.
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string; depositId: string }> }) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
     const appId = parseInt((await params).id)
     if (Number.isNaN(appId)) return NextResponse.json({ error: "Application invalide" }, { status: 400 })
 

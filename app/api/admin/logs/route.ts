@@ -1,10 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getLogs, cleanOldLogs, deleteLogsByIds, clearAllLogs } from "@/lib/logger"
-import { requireAdmin, authErrorResponse } from "@/lib/auth"
+import { requireSuperAdmin, authErrorResponse } from "@/lib/auth"
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
 
     const { searchParams } = new URL(request.url)
     
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
 //  - ?daysToKeep=N       → nettoie les entrées de plus de N jours (compat.)
 export async function DELETE(request: NextRequest) {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
 
     const { searchParams } = new URL(request.url)
 

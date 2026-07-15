@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth"
+import { requireSuperAdmin } from "@/lib/auth"
 import { listDeposits, addDeposit } from "@/lib/app-code-store"
 import { logApplicationAction, logError } from "@/lib/logger"
 
@@ -12,7 +12,7 @@ function unauthorized(error: unknown) {
 // GET → liste des dépôts de code de l'application (admin)
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     const appId = parseInt((await params).id)
     if (Number.isNaN(appId)) return NextResponse.json({ error: "Application invalide" }, { status: 400 })
     return NextResponse.json(await listDeposits(appId))
@@ -26,7 +26,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 //   champs : note, kind ("folder" | "zip"), files[] , paths (JSON des chemins relatifs)
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
     const appId = parseInt((await params).id)
     if (Number.isNaN(appId)) return NextResponse.json({ error: "Application invalide" }, { status: 400 })
 

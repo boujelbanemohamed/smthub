@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, User, Lock, Save, Camera, Upload } from "lucide-react"
+import { ArrowLeft, User, Lock, Save, Camera, Upload, Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
 import { PageLoader } from "@/components/loading-spinner"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -41,6 +41,8 @@ export default function ProfilePage() {
   })
   const [avatar, setAvatar] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  // Affichage/masquage des mots de passe (picto œil), par champ.
+  const [showPw, setShowPw] = useState({ current: false, next: false, confirm: false })
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   // Chargement des données utilisateur
@@ -361,39 +363,60 @@ export default function ProfilePage() {
 
               <div>
                 <Label htmlFor="currentPassword" className="text-ink font-medium">Mot de passe actuel</Label>
-                <Input
-                  id="currentPassword"
-                  name="currentPassword"
-                  type="password"
-                  value={formData.currentPassword}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-line rounded-md bg-surface text-ink placeholder-ink-faint focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-colors duration-200 mt-1"
-                />
+                <div className="relative mt-1">
+                  <Input
+                    id="currentPassword"
+                    name="currentPassword"
+                    type={showPw.current ? "text" : "password"}
+                    value={formData.currentPassword}
+                    onChange={handleInputChange}
+                    className="w-full px-3 py-2 pr-10 border border-line rounded-md bg-surface text-ink placeholder-ink-faint focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-colors duration-200"
+                  />
+                  <button type="button" onClick={() => setShowPw((s) => ({ ...s, current: !s.current }))}
+                    aria-label={showPw.current ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink transition-colors">
+                    {showPw.current ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="newPassword" className="text-ink font-medium">Nouveau mot de passe</Label>
-                  <Input
-                    id="newPassword"
-                    name="newPassword"
-                    type="password"
-                    value={formData.newPassword}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-line rounded-md bg-surface text-ink placeholder-ink-faint focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-colors duration-200 mt-1"
-                  />
+                  <div className="relative mt-1">
+                    <Input
+                      id="newPassword"
+                      name="newPassword"
+                      type={showPw.next ? "text" : "password"}
+                      value={formData.newPassword}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 pr-10 border border-line rounded-md bg-surface text-ink placeholder-ink-faint focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-colors duration-200"
+                    />
+                    <button type="button" onClick={() => setShowPw((s) => ({ ...s, next: !s.next }))}
+                      aria-label={showPw.next ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink transition-colors">
+                      {showPw.next ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
                 </div>
 
                 <div>
                   <Label htmlFor="confirmPassword" className="text-ink font-medium">Confirmer le nouveau mot de passe</Label>
-                  <Input
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    type="password"
-                    value={formData.confirmPassword}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-line rounded-md bg-surface text-ink placeholder-ink-faint focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-colors duration-200 mt-1"
-                  />
+                  <div className="relative mt-1">
+                    <Input
+                      id="confirmPassword"
+                      name="confirmPassword"
+                      type={showPw.confirm ? "text" : "password"}
+                      value={formData.confirmPassword}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 pr-10 border border-line rounded-md bg-surface text-ink placeholder-ink-faint focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-colors duration-200"
+                    />
+                    <button type="button" onClick={() => setShowPw((s) => ({ ...s, confirm: !s.confirm }))}
+                      aria-label={showPw.confirm ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-faint hover:text-ink transition-colors">
+                      {showPw.confirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

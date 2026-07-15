@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
-import { requireAdmin, authErrorResponse } from "@/lib/auth"
+import { requireSuperAdmin, authErrorResponse } from "@/lib/auth"
 
 const LOGS_FILE = path.join(process.cwd(), "data", "admin-logs.json")
 const USERS_FILE = path.join(process.cwd(), "data", "users.json")
@@ -27,7 +27,7 @@ const esc = (v: any) =>
 // qu'Excel ouvre nativement (aucune dépendance serveur).
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     const params = new URL(request.url).searchParams
     const startDate = params.get("startDate") || undefined
     const endDate = params.get("endDate") || undefined

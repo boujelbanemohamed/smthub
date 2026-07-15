@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getCurrentUser, requireAdmin, authErrorResponse } from "@/lib/auth"
+import { getCurrentUser, requireSuperAdmin, authErrorResponse } from "@/lib/auth"
 import { listAnnouncements, addAnnouncement, updateAnnouncement, deleteAnnouncement, toggleAnnouncement, isAnnouncementVisible, isAnnouncementForUser } from "@/lib/announcements-store"
 import { listGroups } from "@/lib/groups-store"
 import { getDismissedIdsForUser } from "@/lib/announcement-dismissals-store"
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 // POST { message, level } → crée une annonce (admin)
 export async function POST(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
     const { message, level, start_date, end_date, audience, group_id, user_ids, dismissible } = await request.json()
     if (typeof message !== "string" || !message.trim()) {
       return NextResponse.json({ error: "Message requis" }, { status: 400 })
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
 // PATCH { id } → active/désactive une annonce (admin)
 export async function PATCH(request: NextRequest) {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     const { id } = await request.json()
     const item = await toggleAnnouncement(id)
     if (!item) return NextResponse.json({ error: "Annonce introuvable" }, { status: 404 })
@@ -97,7 +97,7 @@ export async function PATCH(request: NextRequest) {
 // → modifie une annonce existante (admin)
 export async function PUT(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
     const { id, message, level, start_date, end_date, audience, group_id, user_ids, dismissible } = await request.json()
     if (typeof id !== "string" || !id) {
       return NextResponse.json({ error: "id requis" }, { status: 400 })
@@ -141,7 +141,7 @@ export async function PUT(request: NextRequest) {
 // DELETE ?id=... → supprime une annonce (admin)
 export async function DELETE(request: NextRequest) {
   try {
-    const admin = await requireAdmin()
+    const admin = await requireSuperAdmin()
     const id = new URL(request.url).searchParams.get("id") || ""
     const ok = await deleteAnnouncement(id)
     if (!ok) return NextResponse.json({ error: "Annonce introuvable" }, { status: 404 })

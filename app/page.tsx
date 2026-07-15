@@ -22,6 +22,7 @@ interface User {
   email: string
   role: "admin" | "utilisateur"
   avatar?: string | null
+  banque_id?: number | null
 }
 
 interface Application {
@@ -747,16 +748,19 @@ export default function HomePage() {
                   )}
                 </div>
 
-                {/* Redirection vers l'historique complet dans l'admin */}
-                <div className="pt-2 border-t border-line">
-                  <button
-                    type="button"
-                    onClick={() => router.push(`/admin?activity=${activityUser.id}`)}
-                    className="text-sm font-medium text-brand hover:text-brand-hover"
-                  >
-                    Voir tout l'historique dans l'administration →
-                  </button>
-                </div>
+                {/* Redirection vers l'historique complet dans l'admin.
+                    Masqué pour un admin de banque (limité aux 48 h). */}
+                {!(user?.role === "admin" && user?.banque_id != null) ? (
+                  <div className="pt-2 border-t border-line">
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/admin?activity=${activityUser.id}`)}
+                      className="text-sm font-medium text-brand hover:text-brand-hover"
+                    >
+                      Voir tout l'historique dans l'administration →
+                    </button>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

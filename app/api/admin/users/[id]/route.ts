@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import { logUserAction, logError } from "@/lib/logger"
-import { requireAdmin } from "@/lib/auth"
+import { requireAdmin, isBankAdmin } from "@/lib/auth"
 import { sanitizeAvatar } from "@/lib/user-store"
 import { promises as fs } from "fs"
 import path from "path"
@@ -15,6 +15,8 @@ interface User {
   mot_de_passe: string
   role: "admin" | "utilisateur"
   avatar?: string | null
+  banque_id?: number | null
+  actif?: boolean
 }
 
 async function readUsers(): Promise<User[]> {
@@ -41,7 +43,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAdmin()
+    const me = await requireAdmin()
 
     const userId = parseInt((await params).id)
     const userData = await request.json()
@@ -58,19 +60,39 @@ export async function PUT(
     }
 
     const oldUser = users[userIndex]
+
+    // Cloisonnement : un admin de banque ne peut modifier qu'un utilisateur de
+    // SA banque, et ne peut jamais changer la banque de rattachement.
+    if (isBankAdmin(me) && oldUser.banque_id !== me.banque_id) {
+      return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 })
+    }
+
     const changes = []
+    const wantedRole = userData.role === "admin" ? "admin" : "utilisateur"
 
     // Préparer les données de mise à jour
     const updateData: any = {
       nom: userData.nom,
       email: userData.email,
-      role: userData.role
+      role: wantedRole,
+    }
+    // Statut actif/désactivé (si fourni)
+    if (typeof userData.actif === "boolean") {
+      updateData.actif = userData.actif
+      if ((oldUser.actif !== false) !== userData.actif) changes.push(`Statut: ${userData.actif ? "activé" : "désactivé"}`)
+    }
+    // Banque : seul le super-admin peut la changer.
+    if (!isBankAdmin(me) && "banque_id" in userData) {
+      const bid = (userData.banque_id === null || userData.banque_id === undefined || userData.banque_id === "")
+        ? null : Number(userData.banque_id)
+      updateData.banque_id = Number.isNaN(bid as number) ? null : bid
+      if ((oldUser.banque_id ?? null) !== updateData.banque_id) changes.push("Banque modifiée")
     }
 
     // Détecter les changements
     if (oldUser.nom !== userData.nom) changes.push(`Nom: ${oldUser.nom} → ${userData.nom}`)
     if (oldUser.email !== userData.email) changes.push(`Email: ${oldUser.email} → ${userData.email}`)
-    if (oldUser.role !== userData.role) changes.push(`Rôle: ${oldUser.role} → ${userData.role}`)
+    if (oldUser.role !== wantedRole) changes.push(`Rôle: ${oldUser.role} → ${wantedRole}`)
 
     // Si un mot de passe est fourni, le hacher
     if (userData.mot_de_passe && userData.mot_de_passe.trim() !== "") {
@@ -120,7 +142,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAdmin()
+    const me = await requireAdmin()
 
     const userId = parseInt((await params).id)
     const users = await readUsers()
@@ -133,6 +155,11 @@ export async function DELETE(
         "Utilisateur non trouvé"
       )
       return NextResponse.json({ error: "Utilisateur non trouvé" }, { status: 404 })
+    }
+
+    // Cloisonnement : un admin de banque ne supprime que dans SA banque.
+    if (isBankAdmin(me) && users[userIndex].banque_id !== me.banque_id) {
+      return NextResponse.json({ error: "Accès non autorisé" }, { status: 403 })
     }
 
     const deletedUser = users[userIndex]

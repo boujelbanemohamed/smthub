@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import { logUserAction, logError } from "@/lib/logger"
-import { requireAdmin, authErrorResponse } from "@/lib/auth"
+import { requireAdmin, authErrorResponse, isBankAdmin } from "@/lib/auth"
 import { sanitizeAvatar } from "@/lib/user-store"
 import { promises as fs } from "fs"
 import path from "path"
@@ -16,6 +16,8 @@ interface User {
   mot_de_passe: string
   role: "admin" | "utilisateur"
   avatar?: string | null
+  banque_id?: number | null
+  actif?: boolean
 }
 
 async function readUsers(): Promise<User[]> {
@@ -39,14 +41,18 @@ async function writeUsers(users: User[]): Promise<void> {
 
 export async function GET() {
   try {
-    await requireAdmin()
+    const me = await requireAdmin()
     const usePostgres = process.env.DATABASE_TYPE === "postgresql" || !!process.env.DATABASE_URL
     if (usePostgres) {
       const users = await prisma.user.findMany({ orderBy: { id: "asc" } })
       const safe = users.map(({ mot_de_passe, ...u }: any) => u)
       return NextResponse.json(safe)
     } else {
-      const users = await readUsers()
+      let users = await readUsers()
+      // Cloisonnement : un admin de banque ne voit que les utilisateurs de sa banque.
+      if (isBankAdmin(me)) {
+        users = users.filter((u: any) => u.banque_id === me.banque_id)
+      }
       const usersWithoutPasswords = users.map(({ mot_de_passe, ...user }) => user)
       return NextResponse.json(usersWithoutPasswords)
     }
@@ -57,9 +63,21 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAdmin()
+    const me = await requireAdmin()
 
     const userData = await request.json()
+
+    // Rôle demandé (par défaut utilisateur). Seuls admin/utilisateur sont valides.
+    const wantedRole = userData.role === "admin" ? "admin" : "utilisateur"
+    // Cloisonnement : un admin de banque crée forcément dans SA banque ; un
+    // super-admin choisit la banque (ou aucune). `actif` par défaut true.
+    const bankAdmin = isBankAdmin(me)
+    const banqueId = bankAdmin
+      ? me.banque_id!
+      : (userData.banque_id === null || userData.banque_id === undefined || userData.banque_id === ""
+          ? null
+          : Number(userData.banque_id))
+    const actif = userData.actif === false ? false : true
 
     // Validation des données requises
     if (!userData.nom || !userData.email || !userData.mot_de_passe) {
@@ -112,7 +130,7 @@ export async function POST(request: NextRequest) {
         data: {
           nom: userData.nom,
           email: userData.email,
-          role: userData.role || "utilisateur",
+          role: wantedRole,
           mot_de_passe: hashedPassword,
           ...(avatarValue !== undefined ? { avatar: avatarValue } : {})
         },
@@ -122,13 +140,15 @@ export async function POST(request: NextRequest) {
     } else {
       const users = await readUsers()
       const newId = Math.max(...users.map(u => u.id), 0) + 1
-      const newUser = {
+      const newUser: User = {
         id: newId,
         nom: userData.nom,
         email: userData.email,
-        role: userData.role || "utilisateur",
+        role: wantedRole,
         mot_de_passe: hashedPassword,
-        avatar: avatarValue ?? null
+        avatar: avatarValue ?? null,
+        banque_id: Number.isNaN(banqueId as number) ? null : banqueId,
+        actif,
       }
       users.push(newUser)
       await writeUsers(users)

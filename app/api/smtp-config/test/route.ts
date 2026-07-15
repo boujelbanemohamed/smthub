@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/auth"
+import { requireSuperAdmin } from "@/lib/auth"
 import nodemailer from "nodemailer"
 
 interface SmtpTestConfig {
@@ -14,7 +14,7 @@ interface SmtpTestConfig {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     
     const config: SmtpTestConfig = await request.json()
     const { host, port, secure, user, password, from_name, from_email } = config

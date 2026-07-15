@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
-import { requireAdmin, authErrorResponse } from "@/lib/auth"
+import { requireSuperAdmin, authErrorResponse } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { toCsv } from "@/lib/csv"
 
@@ -10,7 +10,7 @@ const USERS_FILE = path.join(process.cwd(), "data", "users.json")
 // GET → CSV des utilisateurs (SANS mot de passe).
 export async function GET() {
   try {
-    await requireAdmin()
+    await requireSuperAdmin()
     const usePostgres = process.env.DATABASE_TYPE === "postgresql" || !!process.env.DATABASE_URL
 
     let users: any[] = []
