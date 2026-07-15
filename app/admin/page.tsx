@@ -124,6 +124,7 @@ interface Bank {
   nom: string
   actif: boolean
   app_ids: number[]
+  logo_url?: string | null
   created_at: string
 }
 
@@ -2635,18 +2636,26 @@ function UserForm({ user, onSubmit, banks = [], isSuper = false }: { user?: User
   const [formError, setFormError] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Profil (super-admin) déduit du couple rôle + banque, avec 4 valeurs distinctes.
-  const profile: "super_admin" | "user" | "admin_banque" | "user_banque" =
-    formData.role === "admin"
-      ? (formData.banque_id != null ? "admin_banque" : "super_admin")
-      : (formData.banque_id != null ? "user_banque" : "user")
+  // Profil (super-admin) : état explicite à 4 valeurs. On ne le déduit pas de
+  // banque_id, sinon « Utilisateur banque » (banque encore non choisie)
+  // retomberait sur « Utilisateur » et la liste des banques n'apparaîtrait pas.
+  type ProfileVal = "super_admin" | "user" | "admin_banque" | "user_banque"
+  const deriveProfile = (u?: User | null): ProfileVal => {
+    const role = u?.role || "utilisateur"
+    const inBank = u?.banque_id != null
+    if (role === "admin") return inBank ? "admin_banque" : "super_admin"
+    return inBank ? "user_banque" : "user"
+  }
+  const [profile, setProfileState] = useState<ProfileVal>(deriveProfile(user))
   const needsBank = profile === "admin_banque" || profile === "user_banque"
   const setProfile = (value: string) => {
     setFormError("")
-    if (value === "super_admin") setFormData((f) => ({ ...f, role: "admin", banque_id: null }))
-    else if (value === "user") setFormData((f) => ({ ...f, role: "utilisateur", banque_id: null }))
-    else if (value === "admin_banque") setFormData((f) => ({ ...f, role: "admin", banque_id: f.banque_id ?? null }))
-    else if (value === "user_banque") setFormData((f) => ({ ...f, role: "utilisateur", banque_id: f.banque_id ?? null }))
+    const v = value as ProfileVal
+    setProfileState(v)
+    if (v === "super_admin") setFormData((f) => ({ ...f, role: "admin", banque_id: null }))
+    else if (v === "user") setFormData((f) => ({ ...f, role: "utilisateur", banque_id: null }))
+    else if (v === "admin_banque") setFormData((f) => ({ ...f, role: "admin" }))
+    else if (v === "user_banque") setFormData((f) => ({ ...f, role: "utilisateur" }))
   }
 
   // Mettre à jour le formulaire quand l'utilisateur change
@@ -2665,6 +2674,8 @@ function UserForm({ user, onSubmit, banks = [], isSuper = false }: { user?: User
       setFormData({ nom: "", email: "", role: "utilisateur", mot_de_passe: "", banque_id: null, actif: true })
       setAvatar(null)
     }
+    setProfileState(deriveProfile(user))
+    setFormError("")
   }, [user])
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -3180,14 +3191,66 @@ function AppCodeManager({ appId, appName }: { appId: number; appName: string }) 
 // activer/désactiver, supprimer, et attribuer des applications à chaque banque.
 function BanksPanel({ banks, setBanks, applications }: { banks: Bank[]; setBanks: (b: Bank[]) => void; applications: Application[] }) {
   const [newName, setNewName] = useState("")
+  const [newLogo, setNewLogo] = useState<string | null>(null)
+  const [logoBusy, setLogoBusy] = useState(false)
   const [error, setError] = useState("")
   const [editId, setEditId] = useState<number | null>(null)
   const [editName, setEditName] = useState("")
   const [expanded, setExpanded] = useState<number | null>(null)
+  const newLogoRef = useRef<HTMLInputElement>(null)
+  const rowLogoRef = useRef<HTMLInputElement>(null)
+  const [logoTarget, setLogoTarget] = useState<number | null>(null)
 
   const reload = async () => {
     const res = await fetch("/api/admin/banks")
     if (res.ok) setBanks(await res.json())
+  }
+
+  // Téléverse une image et renvoie son URL (réutilise l'endpoint /api/upload).
+  const uploadImage = async (file: File): Promise<string | null> => {
+    if (file.size > 2 * 1024 * 1024) { setError("Logo trop volumineux (max 2 Mo)."); return null }
+    const fd = new FormData()
+    fd.append("image", file)
+    const res = await fetch("/api/upload", { method: "POST", body: fd })
+    const data = await res.json().catch(() => ({}))
+    if (res.ok && data.url) return data.url
+    setError(data.error || "Échec du téléversement du logo.")
+    return null
+  }
+
+  const onNewLogoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setError(""); setLogoBusy(true)
+    const url = await uploadImage(file)
+    if (url) setNewLogo(url)
+    setLogoBusy(false)
+    if (newLogoRef.current) newLogoRef.current.value = ""
+  }
+
+  const onRowLogoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    const id = logoTarget
+    if (!file || id == null) return
+    setError(""); setLogoBusy(true)
+    const url = await uploadImage(file)
+    if (url) {
+      const res = await fetch(`/api/admin/banks/${id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logo_url: url }),
+      })
+      if (res.ok) await reload()
+    }
+    setLogoBusy(false); setLogoTarget(null)
+    if (rowLogoRef.current) rowLogoRef.current.value = ""
+  }
+
+  const removeLogo = async (b: Bank) => {
+    const res = await fetch(`/api/admin/banks/${b.id}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ logo_url: null }),
+    })
+    if (res.ok) await reload()
   }
 
   const create = async () => {
@@ -3196,9 +3259,9 @@ function BanksPanel({ banks, setBanks, applications }: { banks: Bank[]; setBanks
     if (!nom) return
     const res = await fetch("/api/admin/banks", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nom }),
+      body: JSON.stringify({ nom, logo_url: newLogo }),
     })
-    if (res.ok) { setNewName(""); await reload() }
+    if (res.ok) { setNewName(""); setNewLogo(null); await reload() }
     else { const d = await res.json().catch(() => ({})); setError(d.error || "Erreur") }
   }
 
@@ -3249,6 +3312,18 @@ function BanksPanel({ banks, setBanks, applications }: { banks: Bank[]; setBanks
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
+          {newLogo ? (
+            <img src={newLogo} alt="Logo" className="w-10 h-10 rounded-md object-contain border border-line bg-white" />
+          ) : (
+            <div className="w-10 h-10 rounded-md border border-dashed border-line flex items-center justify-center text-ink-faint text-[10px]">Logo</div>
+          )}
+          <input ref={newLogoRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={onNewLogoPick} className="hidden" />
+          <Button type="button" variant="outline" className="border-line text-ink" disabled={logoBusy} onClick={() => newLogoRef.current?.click()}>
+            {logoBusy ? "…" : (newLogo ? "Changer le logo" : "Logo")}
+          </Button>
+          {newLogo && (
+            <Button type="button" variant="ghost" className="text-ink-muted" onClick={() => setNewLogo(null)}>Retirer</Button>
+          )}
           <Input value={newName} onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); create() } }}
             placeholder="Nom de la banque…" className="max-w-xs bg-surface border-line text-ink" />
@@ -3257,6 +3332,8 @@ function BanksPanel({ banks, setBanks, applications }: { banks: Bank[]; setBanks
           </Button>
         </div>
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {/* Champ caché partagé pour changer le logo d'une banque existante */}
+        <input ref={rowLogoRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={onRowLogoPick} className="hidden" />
 
         {banks.length === 0 ? (
           <p className="text-sm text-ink-muted">Aucune banque pour l'instant.</p>
@@ -3266,6 +3343,11 @@ function BanksPanel({ banks, setBanks, applications }: { banks: Bank[]; setBanks
               <li key={b.id} className="border border-line rounded-md p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
+                    {b.logo_url ? (
+                      <img src={b.logo_url} alt={b.nom} className="w-8 h-8 rounded-md object-contain border border-line bg-white shrink-0" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-md bg-surface-muted border border-line flex items-center justify-center text-ink-faint text-xs shrink-0">{b.nom.charAt(0).toUpperCase()}</div>
+                    )}
                     {editId === b.id ? (
                       <>
                         <Input value={editName} autoFocus onChange={(e) => setEditName(e.target.value)}
@@ -3288,6 +3370,10 @@ function BanksPanel({ banks, setBanks, applications }: { banks: Bank[]; setBanks
                     <button onClick={() => setExpanded(expanded === b.id ? null : b.id)} className="text-xs text-brand px-2 py-1 border border-line rounded-md hover:bg-app">
                       Applications
                     </button>
+                    <button onClick={() => { setLogoTarget(b.id); rowLogoRef.current?.click() }} className="p-1.5 text-ink-muted hover:text-brand" title="Changer le logo"><Upload className="w-4 h-4" /></button>
+                    {b.logo_url ? (
+                      <button onClick={() => removeLogo(b)} className="p-1.5 text-ink-muted hover:text-amber-600" title="Retirer le logo"><X className="w-4 h-4" /></button>
+                    ) : null}
                     <button onClick={() => { setEditId(b.id); setEditName(b.nom) }} className="p-1.5 text-ink-muted hover:text-brand" title="Renommer"><Edit className="w-4 h-4" /></button>
                     <button onClick={() => toggleActif(b)} className="p-1.5 text-ink-muted hover:text-amber-600" title={b.actif ? "Désactiver" : "Activer"}>
                       {b.actif ? <Square className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}

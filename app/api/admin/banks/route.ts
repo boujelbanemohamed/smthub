@@ -17,8 +17,8 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const admin = await requireSuperAdmin()
-    const { nom, app_ids } = await request.json()
-    const result = await addBank(nom, Array.isArray(app_ids) ? app_ids : [])
+    const { nom, app_ids, logo_url } = await request.json()
+    const result = await addBank(nom, Array.isArray(app_ids) ? app_ids : [], logo_url)
     if ("error" in result) return NextResponse.json({ error: result.error }, { status: 400 })
     await logAction("Création banque", `Banque créée: ${result.nom}`, "INFO", admin.id, admin.nom)
     return NextResponse.json(result, { status: 201 })

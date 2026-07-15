@@ -15,6 +15,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       nom: typeof body.nom === "string" ? body.nom : undefined,
       app_ids: Array.isArray(body.app_ids) ? body.app_ids : undefined,
       actif: typeof body.actif === "boolean" ? body.actif : undefined,
+      logo_url: body.logo_url !== undefined ? body.logo_url : undefined,
     })
     if ("error" in result) {
       return NextResponse.json({ error: result.error }, { status: result.error === "Banque introuvable" ? 404 : 400 })

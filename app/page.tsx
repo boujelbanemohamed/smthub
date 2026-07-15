@@ -41,6 +41,7 @@ export default function HomePage() {
   const [applications, setApplications] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
   const [showWelcome, setShowWelcome] = useState(true)
+  const [myBank, setMyBank] = useState<{ id: number; nom: string; logo_url?: string | null } | null>(null)
   const router = useRouter()
 
   // La bannière de bienvenue disparaît automatiquement après 2 minutes.
@@ -294,6 +295,10 @@ export default function HomePage() {
           loadAnnouncements(),
           loadTopApps(),
           isAdmin ? loadPresence() : Promise.resolve(),
+          // Banque de l'utilisateur (pour afficher son logo dans l'en-tête)
+          authData.user?.banque_id != null
+            ? fetch("/api/my-bank").then((r) => (r.ok ? r.json() : null)).then(setMyBank).catch(() => {})
+            : Promise.resolve(),
         ])
       } catch (error) {
         console.error("Erreur lors du chargement:", error)
@@ -336,11 +341,27 @@ export default function HomePage() {
       <header className="bg-surface border-b border-line shadow-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            {/* Logo */}
-            <div className="flex items-center">
+            {/* Logo plateforme + (si banque) logo de la banque et rôle */}
+            <div className="flex items-center gap-3 min-w-0">
               <div className="flex-shrink-0">
                 <BrandLogo height={32} />
               </div>
+              {user.banque_id != null && myBank && (
+                <>
+                  <span className="h-8 w-px bg-line hidden sm:block" aria-hidden />
+                  {myBank.logo_url ? (
+                    <img src={myBank.logo_url} alt={myBank.nom} className="h-8 w-8 rounded-md object-contain border border-line bg-white shrink-0" />
+                  ) : (
+                    <div className="h-8 w-8 rounded-md bg-surface-muted border border-line flex items-center justify-center text-ink text-xs font-semibold shrink-0">{myBank.nom.charAt(0).toUpperCase()}</div>
+                  )}
+                  <div className="hidden sm:flex flex-col leading-tight min-w-0">
+                    <span className="text-ink font-medium text-sm truncate">{myBank.nom}</span>
+                    <span className="text-[11px] font-bold text-red-600 truncate">
+                      Connecté en tant que {user.role === "admin" ? "Administrateur de banque" : "Utilisateur banque"}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* User Menu */}
