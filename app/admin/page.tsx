@@ -1559,7 +1559,10 @@ export default function AdminPage() {
                         <div className="flex items-center space-x-4">
                           <UserAvatar name={user.nom} avatar={user.avatar} size={40} />
                           <div>
-                            <p className="font-medium text-ink">{user.nom}</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-medium text-ink">{user.nom}</p>
+                              <Badge className={roleBadge(user).className}>{roleBadge(user).label}</Badge>
+                            </div>
                             <p className="text-sm text-ink-muted">{user.email}</p>
                           </div>
                         </div>
