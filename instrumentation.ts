@@ -5,5 +5,14 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { startBackupScheduler } = await import("@/lib/backup-scheduler")
     startBackupScheduler()
+    // Migration idempotente : accorde aux admins de banque existants l'accès à
+    // toutes les applis de leur banque (une seule fois), pour que la « Gestion
+    // des accès » reflète bien leur tableau de bord.
+    try {
+      const { ensureBankAdminsSeeded } = await import("@/lib/access-seed")
+      await ensureBankAdminsSeeded()
+    } catch (e) {
+      console.error("[access-seed] Échec de l'initialisation des accès admins de banque:", e)
+    }
   }
 }

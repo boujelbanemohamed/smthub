@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs"
 import { logUserAction, logError } from "@/lib/logger"
 import { requireAdmin, isBankAdmin } from "@/lib/auth"
 import { sanitizeAvatar } from "@/lib/user-store"
+import { grantAllBankApps } from "@/lib/access-seed"
 import { promises as fs } from "fs"
 import path from "path"
 
@@ -17,6 +18,7 @@ interface User {
   avatar?: string | null
   banque_id?: number | null
   actif?: boolean
+  access_initialized?: boolean
 }
 
 async function readUsers(): Promise<User[]> {
@@ -110,7 +112,18 @@ export async function PUT(
 
     // Mettre à jour l'utilisateur
     users[userIndex] = { ...users[userIndex], ...updateData }
+
+    // Si l'utilisateur DEVIENT admin de banque (et n'a jamais été initialisé),
+    // on lui accorde par défaut l'accès à toutes les applis de sa banque.
+    const finalUser = users[userIndex]
+    const becameBankAdmin =
+      finalUser.role === "admin" && finalUser.banque_id != null && !finalUser.access_initialized
+    if (becameBankAdmin) finalUser.access_initialized = true
+
     await writeUsers(users)
+    if (becameBankAdmin) {
+      await grantAllBankApps(finalUser.id, finalUser.banque_id as number)
+    }
 
     // Logger l'action
     await logUserAction(

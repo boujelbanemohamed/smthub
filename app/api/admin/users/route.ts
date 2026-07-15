@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs"
 import { logUserAction, logError } from "@/lib/logger"
 import { requireAdmin, authErrorResponse, isBankAdmin } from "@/lib/auth"
 import { sanitizeAvatar } from "@/lib/user-store"
+import { grantAllBankApps } from "@/lib/access-seed"
 import { promises as fs } from "fs"
 import path from "path"
 import { prisma } from "@/lib/prisma"
@@ -18,6 +19,7 @@ interface User {
   avatar?: string | null
   banque_id?: number | null
   actif?: boolean
+  access_initialized?: boolean
 }
 
 async function readUsers(): Promise<User[]> {
@@ -140,6 +142,8 @@ export async function POST(request: NextRequest) {
     } else {
       const users = await readUsers()
       const newId = Math.max(...users.map(u => u.id), 0) + 1
+      const finalBanqueId = Number.isNaN(banqueId as number) ? null : banqueId
+      const isNewBankAdmin = wantedRole === "admin" && finalBanqueId != null
       const newUser: User = {
         id: newId,
         nom: userData.nom,
@@ -147,11 +151,18 @@ export async function POST(request: NextRequest) {
         role: wantedRole,
         mot_de_passe: hashedPassword,
         avatar: avatarValue ?? null,
-        banque_id: Number.isNaN(banqueId as number) ? null : banqueId,
+        banque_id: finalBanqueId,
         actif,
+        // Un admin de banque est initialisé avec l'accès à toutes les applis
+        // de sa banque (marqueur pour ne pas ré-accorder après un décochage).
+        ...(isNewBankAdmin ? { access_initialized: true } : {}),
       }
       users.push(newUser)
       await writeUsers(users)
+      // Accès par défaut : toutes les applications de la banque pour un admin de banque.
+      if (isNewBankAdmin) {
+        await grantAllBankApps(newId, finalBanqueId as number)
+      }
       const { mot_de_passe, ...safe } = newUser
       responseUser = safe
     }

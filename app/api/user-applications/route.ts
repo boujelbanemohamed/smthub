@@ -53,13 +53,21 @@ export async function GET() {
       return NextResponse.json(sortedApps)
     }
 
-    // Admin de banque → uniquement les applications attribuées à sa banque par
-    // le super-admin (et non toutes les applications).
+    // Admin de banque → applications qui lui sont accordées individuellement
+    // (user_access), en restant bornées aux applis attribuées à sa banque.
+    // Ainsi, révoquer un accès dans « Gestion des accès » le retire aussi de
+    // son tableau de bord. Par défaut, à sa création, tous les accès de la
+    // banque lui sont accordés (voir lib/access-seed).
     if (isBankAdmin(currentUser)) {
       const bank = await getBank(currentUser.banque_id as number)
       const allowed = new Set(bank?.app_ids || [])
+      const grantedIds = new Set(
+        userAccess
+          .filter((access) => access.utilisateur_id === currentUser.id)
+          .map((access) => access.application_id)
+      )
       const bankApps = applications
-        .filter((app) => allowed.has(app.id))
+        .filter((app) => allowed.has(app.id) && grantedIds.has(app.id))
         .sort((a, b) => a.ordre_affichage - b.ordre_affichage)
       return NextResponse.json(bankApps)
     }
