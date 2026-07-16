@@ -19,6 +19,7 @@ interface EmailOptions {
   subject: string
   html: string
   text?: string
+  attachments?: { filename: string; content: string | Buffer; contentType?: string }[]
 }
 
 const SMTP_CONFIG_FILE = path.join(process.cwd(), "data", "smtp-config.json")
@@ -147,6 +148,7 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
       subject: options.subject,
       html: options.html,
       text: options.text,
+      attachments: options.attachments,
     })
 
     console.log(`Email envoyé avec succès à ${options.to}`)

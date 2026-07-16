@@ -48,6 +48,7 @@ import { PageLoader, SectionLoader } from "@/components/loading-spinner"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { UserAvatar } from "@/components/ui/user-avatar"
 import { BrandLogo } from "@/components/brand-logo"
+import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts"
 import { BankHeaderInfo } from "@/components/bank-header-info"
 import { UserHeaderInfo } from "@/components/user-header-info"
 
@@ -4414,7 +4415,7 @@ function AnnouncementsPanel({ users }: { users: User[] }) {
 // Panneau : Statistiques d'usage
 // ---------------------------------------------------------------------------
 function StatsPanel({ applications, users, banks = [], isSuper = false }: { applications: Application[]; users: User[]; banks?: Bank[]; isSuper?: boolean }) {
-  const [data, setData] = useState<{ totalOpens: number; topApps: any[]; topUsers: any[]; firstOpen?: string | null; lastOpen?: string | null; activeBanks?: number; byBank?: any[] | null; bankDetails?: any[] | null } | null>(null)
+  const [data, setData] = useState<{ totalOpens: number; topApps: any[]; topUsers: any[]; firstOpen?: string | null; lastOpen?: string | null; activeBanks?: number; byBank?: any[] | null; bankDetails?: any[] | null; timeline?: any[]; byHour?: any[]; byCategory?: any[]; appUsage?: any[] } | null>(null)
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [userId, setUserId] = useState("all")
@@ -4423,6 +4424,30 @@ function StatsPanel({ applications, users, banks = [], isSuper = false }: { appl
   useEffect(() => {
     fetch("/api/admin/announcement-dismissals").then((r) => r.ok ? r.json() : null).then((d) => setDismissals(d?.announcements || [])).catch(() => {})
   }, [])
+
+  // Rapports planifiés par email (super-admin)
+  const [reportCfg, setReportCfg] = useState<{ enabled: boolean; frequency: "weekly" | "monthly"; hour: number } | null>(null)
+  const [reportMsg, setReportMsg] = useState("")
+  const [reportBusy, setReportBusy] = useState(false)
+  useEffect(() => {
+    if (!isSuper) return
+    fetch("/api/admin/reports/config").then((r) => r.ok ? r.json() : null).then((c) => { if (c) setReportCfg({ enabled: !!c.enabled, frequency: c.frequency === "monthly" ? "monthly" : "weekly", hour: c.hour ?? 7 }) }).catch(() => {})
+  }, [isSuper])
+  const saveReportCfg = async (patch: Partial<{ enabled: boolean; frequency: "weekly" | "monthly"; hour: number }>) => {
+    if (!reportCfg) return
+    const next = { ...reportCfg, ...patch }
+    setReportCfg(next); setReportMsg("")
+    const res = await fetch("/api/admin/reports/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) })
+    if (res.ok) setReportMsg("Configuration enregistrée.")
+  }
+  const sendReportNow = async () => {
+    setReportBusy(true); setReportMsg("")
+    try {
+      const res = await fetch("/api/admin/reports/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sendNow: true, frequency: reportCfg?.frequency }) })
+      const d = await res.json().catch(() => ({}))
+      setReportMsg(res.ok ? `Rapport envoyé (${d.sent} email(s)).` : (d.error || "Échec de l'envoi (SMTP configuré ?)."))
+    } finally { setReportBusy(false) }
+  }
 
   useEffect(() => {
     const p = new URLSearchParams()
@@ -4684,6 +4709,69 @@ function StatsPanel({ applications, users, banks = [], isSuper = false }: { appl
 
           <div className="text-sm text-ink-muted">Total d'ouvertures d'applications : <strong className="text-ink">{data?.totalOpens ?? 0}</strong></div>
 
+          {/* Graphiques : courbe d'usage dans le temps + heures de pointe */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="border border-line rounded-lg p-3">
+              <h4 className="font-semibold text-ink mb-3">Ouvertures dans le temps</h4>
+              {(data?.timeline && data.timeline.length > 0) ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={data.timeline} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--fb-border,#e2e8f0)" />
+                    <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(d) => { const p = String(d).split("-"); return p.length === 3 ? `${p[2]}/${p[1]}` : d }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <Tooltip labelFormatter={(d) => `Date : ${d}`} formatter={(v: any) => [`${v} ouverture(s)`, ""]} />
+                    <Line type="monotone" dataKey="count" stroke="var(--fb-primary,#1877f2)" strokeWidth={2} dot={{ r: 2 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : <p className="text-ink-muted text-sm">Aucune donnée sur la période.</p>}
+            </div>
+            <div className="border border-line rounded-lg p-3">
+              <h4 className="font-semibold text-ink mb-3">Heures de pointe</h4>
+              {(data?.byHour && data.byHour.some((h: any) => h.count > 0)) ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={data.byHour} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--fb-border,#e2e8f0)" />
+                    <XAxis dataKey="hour" tick={{ fontSize: 11 }} tickFormatter={(h) => `${h}h`} interval={1} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <Tooltip labelFormatter={(h) => `${h}h – ${h}h59`} formatter={(v: any) => [`${v} ouverture(s)`, ""]} />
+                    <Bar dataKey="count" fill="var(--fb-primary,#1877f2)" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <p className="text-ink-muted text-sm">Aucune donnée sur la période.</p>}
+            </div>
+          </div>
+
+          {/* Répartition par catégorie */}
+          <div className="border border-line rounded-lg p-3">
+            <h4 className="font-semibold text-ink mb-3">Ouvertures par catégorie</h4>
+            {(data?.byCategory && data.byCategory.length > 0) ? (
+              <ResponsiveContainer width="100%" height={Math.max(120, (data.byCategory.length) * 34)}>
+                <BarChart layout="vertical" data={data.byCategory} margin={{ top: 5, right: 20, left: 10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--fb-border,#e2e8f0)" />
+                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="category" width={140} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v: any) => [`${v} ouverture(s)`, ""]} />
+                  <Bar dataKey="count" fill="var(--fb-primary,#1877f2)" radius={[0, 3, 3, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <p className="text-ink-muted text-sm">Aucune donnée.</p>}
+          </div>
+
+          {/* Applications jamais / peu utilisées */}
+          <div>
+            <h4 className="font-semibold text-ink mb-3">Applications les moins utilisées</h4>
+            {(data?.appUsage && data.appUsage.length > 0) ? (
+              <div className="space-y-1">
+                {data.appUsage.slice(0, 10).map((a: any) => (
+                  <div key={a.appId} className={`flex items-center justify-between text-sm border-b border-line py-1 ${a.count === 0 ? "text-red-600" : "text-ink"}`}>
+                    <span className="truncate">{a.nom} <span className="text-ink-faint">· {a.category}</span></span>
+                    <span className="font-medium shrink-0">{a.count === 0 ? "Jamais utilisée" : `${a.count} ouverture(s)`}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-ink-muted text-sm">Aucune application dans le périmètre.</p>}
+          </div>
+
           <div>
             <h4 className="font-semibold text-ink mb-3">Applications les plus ouvertes</h4>
             {(!data || data.topApps.length === 0) ? (
@@ -4720,6 +4808,44 @@ function StatsPanel({ applications, users, banks = [], isSuper = false }: { appl
           </div>
         </CardContent>
       </Card>
+
+      {/* Rapports planifiés par email (super-admin) */}
+      {isSuper && reportCfg && (
+        <Card className="bg-surface border border-line shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)]">
+          <CardHeader>
+            <CardTitle className="text-ink flex items-center gap-2"><Mail className="w-5 h-5" /> Rapports planifiés par email</CardTitle>
+            <p className="text-sm text-ink-muted">Envoi automatique du rapport de statistiques (Excel) au super-admin et aux administrateurs de chaque banque (rapport limité à leur banque).</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <input type="checkbox" checked={reportCfg.enabled} onChange={(e) => saveReportCfg({ enabled: e.target.checked })} className="h-4 w-4 accent-[var(--brand,#1877f2)]" />
+              Activer l'envoi automatique
+            </label>
+            <div className="flex flex-wrap items-end gap-4">
+              <div>
+                <Label className="text-ink font-medium text-sm">Fréquence</Label>
+                <select value={reportCfg.frequency} onChange={(e) => saveReportCfg({ frequency: e.target.value as any })}
+                  className="block mt-1 border border-line rounded-md bg-surface text-ink px-3 h-10">
+                  <option value="weekly">Hebdomadaire</option>
+                  <option value="monthly">Mensuel</option>
+                </select>
+              </div>
+              <div>
+                <Label className="text-ink font-medium text-sm">Heure d'envoi</Label>
+                <select value={reportCfg.hour} onChange={(e) => saveReportCfg({ hour: Number(e.target.value) })}
+                  className="block mt-1 border border-line rounded-md bg-surface text-ink px-3 h-10">
+                  {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, "0")}h</option>)}
+                </select>
+              </div>
+              <Button type="button" variant="outline" className="border-line text-ink" disabled={reportBusy} onClick={sendReportNow}>
+                {reportBusy ? "Envoi…" : "Envoyer maintenant (test)"}
+              </Button>
+            </div>
+            {reportMsg && <p className="text-sm text-ink-muted">{reportMsg}</p>}
+            <p className="text-xs text-ink-faint">Nécessite un serveur SMTP configuré (onglet « Configuration Emails »).</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Fermetures d'annonces (uniquement pour les annonces fermables) */}
       <Card className="bg-surface border border-line shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)]">

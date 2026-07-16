@@ -15,6 +15,12 @@ export interface BankDetail {
 
 export interface SimpleUser { id: number; nom: string; banque_id?: number | null }
 export interface SimpleBank { id: number; nom: string; actif?: boolean }
+export interface SimpleApp { id: number; nom: string; category?: string }
+
+export interface TimePoint { date: string; count: number }
+export interface HourPoint { hour: number; count: number }
+export interface CategoryStat { category: string; count: number }
+export interface AppUsage { appId: number; nom: string; category: string; count: number }
 
 export interface AggregatedStats {
   totalOpens: number
@@ -25,19 +31,28 @@ export interface AggregatedStats {
   activeBanks: number
   firstOpen: string | null
   lastOpen: string | null
+  // Séries pour les graphiques
+  timeline: TimePoint[]
+  byHour: HourPoint[]
+  byCategory: CategoryStat[]
+  // Usage par application (toutes les applis du périmètre, y compris à 0) pour
+  // repérer les applications jamais/peu utilisées.
+  appUsage: AppUsage[]
 }
 
 const HORS_BANQUE = "Hors banque"
 
 // `opens` : lignes de log déjà filtrées (action = "Ouverture application",
 // filtres date/utilisateur/banque appliqués en amont).
-export function aggregate(opens: any[], users: SimpleUser[], banks: SimpleBank[]): AggregatedStats {
+export function aggregate(opens: any[], users: SimpleUser[], banks: SimpleBank[], apps: SimpleApp[] = []): AggregatedStats {
   const userBank = new Map<number, number | null>()
   const userName = new Map<number, string>()
   for (const u of users) {
     userBank.set(u.id, u.banque_id ?? null)
     userName.set(u.id, u.nom)
   }
+  const appCategory = new Map<number, string>()
+  for (const a of apps) appCategory.set(a.id, (a.category || "").trim())
   const bankName = new Map<number, string>()
   for (const b of banks) bankName.set(b.id, b.nom)
 
@@ -45,6 +60,9 @@ export function aggregate(opens: any[], users: SimpleUser[], banks: SimpleBank[]
   const byUser = new Map<number, UserStat>()
   const byBank = new Map<string, BankStat>() // clé : id de banque ou "null"
   const byBankApp = new Map<string, Map<number, AppStat>>()
+  const byDay = new Map<string, number>() // "YYYY-MM-DD" → count
+  const hours = new Array(24).fill(0) as number[]
+  const byCat = new Map<string, number>()
 
   const keyOf = (bId: number | null) => (bId == null ? "null" : String(bId))
   const nameOf = (bId: number | null) => (bId == null ? HORS_BANQUE : bankName.get(bId) || `Banque ${bId}`)
@@ -77,6 +95,17 @@ export function aggregate(opens: any[], users: SimpleUser[], banks: SimpleBank[]
 
     if (!firstOpen || l.timestamp < firstOpen) firstOpen = l.timestamp
     if (!lastOpen || l.timestamp > lastOpen) lastOpen = l.timestamp
+
+    // Séries temporelles
+    const d = new Date(l.timestamp)
+    if (!Number.isNaN(d.getTime())) {
+      const day = d.toISOString().slice(0, 10)
+      byDay.set(day, (byDay.get(day) || 0) + 1)
+      hours[d.getHours()]++
+    }
+    // Par catégorie (catégorie de l'application ouverte)
+    const cat = appCategory.get(appId) || "Sans catégorie"
+    byCat.set(cat, (byCat.get(cat) || 0) + 1)
   }
 
   const topApps = Array.from(byApp.values()).sort((x, y) => y.count - x.count)
@@ -118,6 +147,22 @@ export function aggregate(opens: any[], users: SimpleUser[], banks: SimpleBank[]
     })
   }
 
+  // Courbe temporelle triée par date croissante
+  const timeline: TimePoint[] = Array.from(byDay.entries())
+    .map(([date, count]) => ({ date, count }))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+  // Répartition par heure (0→23), toujours 24 points
+  const byHour: HourPoint[] = hours.map((count, hour) => ({ hour, count }))
+  // Par catégorie, triée par volume décroissant
+  const byCategory: CategoryStat[] = Array.from(byCat.entries())
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count)
+  // Usage par application : toutes les applis du périmètre (0 inclus), du moins
+  // au plus utilisé (les jamais/peu utilisées d'abord).
+  const appUsage: AppUsage[] = apps
+    .map((a) => ({ appId: a.id, nom: a.nom, category: (a.category || "").trim() || "Sans catégorie", count: byApp.get(a.id)?.count || 0 }))
+    .sort((x, y) => x.count - y.count)
+
   return {
     totalOpens: opens.length,
     topApps,
@@ -127,5 +172,9 @@ export function aggregate(opens: any[], users: SimpleUser[], banks: SimpleBank[]
     activeBanks: banks.filter((b) => b.actif !== false).length,
     firstOpen,
     lastOpen,
+    timeline,
+    byHour,
+    byCategory,
+    appUsage,
   }
 }

@@ -7,6 +7,7 @@ import { aggregate } from "@/lib/stats-agg"
 
 const LOGS_FILE = path.join(process.cwd(), "data", "admin-logs.json")
 const USERS_FILE = path.join(process.cwd(), "data", "users.json")
+const APPLICATIONS_FILE = path.join(process.cwd(), "data", "applications.json")
 
 function inRange(ts: string, startDate?: string | null, endDate?: string | null): boolean {
   const t = new Date(ts).getTime()
@@ -49,7 +50,16 @@ export async function GET(request: NextRequest) {
 
     let allUsers: any[] = []
     try { allUsers = JSON.parse(await fs.readFile(USERS_FILE, "utf-8")) } catch { allUsers = [] }
+    let allApps: any[] = []
+    try { allApps = JSON.parse(await fs.readFile(APPLICATIONS_FILE, "utf-8")) } catch { allApps = [] }
     const banks = await listBanks()
+    // Périmètre applis pour catégories + applis non utilisées (borné à la banque filtrée)
+    let scopedApps = allApps
+    if (bqParam && bqParam !== "all" && !Number.isNaN(Number(bqParam))) {
+      const bk = await getBank(Number(bqParam))
+      const allowed = new Set(bk?.app_ids || [])
+      scopedApps = allApps.filter((a: any) => allowed.has(a.id))
+    }
 
     let userLabel = "Tous"
     if (userId !== null) {
@@ -64,7 +74,7 @@ export async function GET(request: NextRequest) {
         (bankIds === null || (typeof l.userId === "number" && bankIds.has(l.userId)))
     )
 
-    const agg = aggregate(opens, allUsers, banks)
+    const agg = aggregate(opens, allUsers, banks, scopedApps)
     const topApps = agg.topApps
     const topUsers = agg.topUsers
     const total = agg.totalOpens
@@ -135,6 +145,13 @@ ${appRows || `<tr><td ${td} colspan="4">Aucune donnée</td></tr>`}
 <tr><td colspan="4" ${th}>Utilisateurs les plus actifs (global)</td></tr>
 <tr><td ${hd}>Rang</td><td ${hd} colspan="2">Utilisateur</td><td ${hd}>Ouvertures</td></tr>
 ${topUsers.length ? topUsers.map((u, i) => `<tr><td ${td}>${i + 1}</td><td ${td} colspan="2">${esc(u.nom)}</td><td ${tdr}>${u.count}</td></tr>`).join("") : `<tr><td ${td} colspan="4">Aucune donnée</td></tr>`}
+<tr><td colspan="4"></td></tr>
+<tr><td colspan="4" ${th}>Ouvertures par catégorie</td></tr>
+<tr><td ${hd} colspan="2">Catégorie</td><td ${hd}>Ouvertures</td><td ${hd}>Part (%)</td></tr>
+${agg.byCategory.length ? agg.byCategory.map((c) => `<tr><td ${td} colspan="2">${esc(c.category)}</td><td ${tdr}>${c.count}</td><td ${tdr}>${pct(c.count)}</td></tr>`).join("") : `<tr><td ${td} colspan="4">Aucune donnée</td></tr>`}
+<tr><td colspan="4"></td></tr>
+<tr><td colspan="4" ${th}>Applications jamais utilisées sur la période</td></tr>
+${agg.appUsage.filter((a) => a.count === 0).length ? agg.appUsage.filter((a) => a.count === 0).map((a) => `<tr><td ${td} colspan="4">${esc(a.nom)} (${esc(a.category)})</td></tr>`).join("") : `<tr><td ${td} colspan="4">Aucune (toutes les applications ont été ouvertes)</td></tr>`}
 ${bankSections}
 </table></body></html>`
 

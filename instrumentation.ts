@@ -5,6 +5,13 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { startBackupScheduler } = await import("@/lib/backup-scheduler")
     startBackupScheduler()
+    // Planificateur des rapports de statistiques envoyés par email.
+    try {
+      const { startReportScheduler } = await import("@/lib/report-scheduler")
+      startReportScheduler()
+    } catch (e) {
+      console.error("[report-scheduler] Démarrage impossible:", e)
+    }
     // Migration idempotente : accorde aux admins de banque existants l'accès à
     // toutes les applis de leur banque (une seule fois), pour que la « Gestion
     // des accès » reflète bien leur tableau de bord.
