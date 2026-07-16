@@ -48,6 +48,7 @@ import { PageLoader, SectionLoader } from "@/components/loading-spinner"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { UserAvatar } from "@/components/ui/user-avatar"
 import { BrandLogo } from "@/components/brand-logo"
+import { BankHeaderInfo } from "@/components/bank-header-info"
 
 // Composant pour l'avatar d'application avec fallback
 function AppAvatar({ app, size = 48 }: { app: Application, size?: number }) {
@@ -992,6 +993,7 @@ export default function AdminPage() {
                 <span className="text-lg font-semibold text-ink">Administration</span>
                 <p className="text-sm text-ink-muted">Panneau de contrôle</p>
               </div>
+              <BankHeaderInfo />
             </div>
 
             {/* Action Buttons */}

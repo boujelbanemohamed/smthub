@@ -11,6 +11,7 @@ import Link from "next/link"
 import { PageLoader } from "@/components/loading-spinner"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { BrandLogo } from "@/components/brand-logo"
+import { BankHeaderInfo } from "@/components/bank-header-info"
 import { UserAvatar } from "@/components/ui/user-avatar"
 
 interface User {
@@ -210,6 +211,7 @@ export default function ProfilePage() {
                 <span className="text-lg font-semibold text-ink">Mon Profil</span>
                 <p className="text-sm text-ink-muted">Gestion du compte</p>
               </div>
+              <BankHeaderInfo />
             </div>
 
             {/* Action Buttons */}
