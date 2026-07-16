@@ -4335,6 +4335,12 @@ function StatsPanel({ applications, users, banks = [], isSuper = false }: { appl
 
   const userLabel = userId === "all" ? "Tous" : (users.find((u) => String(u.id) === userId)?.nom || userId)
   const bankLabel = banqueId === "all" ? "Toutes" : (banks.find((b) => String(b.id) === banqueId)?.nom || banqueId)
+  // Le menu « Utilisateur » se limite aux utilisateurs de la banque sélectionnée.
+  const statUsers = banqueId === "all" ? users : users.filter((u) => String(u.banque_id ?? "") === banqueId)
+  // Si la banque change et que l'utilisateur choisi n'en fait pas partie, on réinitialise.
+  useEffect(() => {
+    if (userId !== "all" && !statUsers.some((u) => String(u.id) === userId)) setUserId("all")
+  }, [banqueId]) // eslint-disable-line react-hooks/exhaustive-deps
   // Période toujours datée : bornes des filtres, sinon dates réelles des données, sinon date du jour.
   const dOnly = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString("fr-FR") : "")
   const startLabel = startDate ? new Date(startDate).toLocaleDateString("fr-FR") : (dOnly(data?.firstOpen) || new Date().toLocaleDateString("fr-FR"))
@@ -4553,7 +4559,7 @@ function StatsPanel({ applications, users, banks = [], isSuper = false }: { appl
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous les utilisateurs</SelectItem>
-                  {users.map((u) => <SelectItem key={u.id} value={String(u.id)}>{u.nom}</SelectItem>)}
+                  {statUsers.map((u) => <SelectItem key={u.id} value={String(u.id)}>{u.nom}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
