@@ -985,12 +985,12 @@ export default function AdminPage() {
     <div className="min-h-screen bg-app">
       {/* Header */}
       <header className="bg-surface border-b border-line shadow-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-none mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             {/* Logo and Title */}
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-4 min-w-0">
               <BrandLogo height={32} />
-              <div className="hidden md:block">
+              <div className="hidden lg:block shrink-0">
                 <span className="text-lg font-semibold text-ink">Administration</span>
                 <p className="text-sm text-ink-muted">Panneau de contrôle</p>
               </div>

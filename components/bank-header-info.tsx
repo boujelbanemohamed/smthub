@@ -45,7 +45,7 @@ export function BankHeaderInfo() {
   const inBank = banqueId != null && bank
 
   return (
-    <div className="flex items-center gap-3 min-w-0">
+    <div className="flex items-center gap-3 shrink-0">
       <span className="h-8 w-px bg-line hidden sm:block" aria-hidden />
       {inBank ? (
         bank!.logo_url ? (
@@ -57,9 +57,10 @@ export function BankHeaderInfo() {
           </div>
         )
       ) : null}
-      <div className="hidden sm:flex flex-col leading-tight min-w-0">
-        {inBank ? <span className="text-ink font-medium text-sm truncate">{bank!.nom}</span> : null}
-        <span className="text-[11px] font-bold text-red-600 truncate">Connecté en tant que {roleLabel}</span>
+      <div className="hidden sm:flex flex-col leading-tight">
+        {inBank ? <span className="text-ink font-medium text-sm whitespace-nowrap">{bank!.nom}</span> : null}
+        <span className="text-[10px] text-red-500 whitespace-nowrap leading-none">Connecté en tant que</span>
+        <span className="text-xs font-bold text-red-600 whitespace-nowrap leading-tight">{roleLabel}</span>
       </div>
     </div>
   )

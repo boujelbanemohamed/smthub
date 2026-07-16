@@ -26,11 +26,11 @@ export function UserHeaderInfo({ size = 36 }: { size?: number }) {
   if (!user) return null
 
   return (
-    <div className="flex items-center space-x-3">
+    <div className="flex items-center space-x-3 min-w-0">
       <UserAvatar name={user.nom} avatar={user.avatar} size={size} />
-      <div className="hidden md:block">
-        <p className="text-ink font-medium leading-tight">{user.nom}</p>
-        <p className="text-ink-muted text-sm leading-tight">{user.email}</p>
+      <div className="hidden md:block min-w-0 max-w-[220px]">
+        <p className="text-ink font-medium leading-tight truncate">{user.nom}</p>
+        <p className="text-ink-muted text-sm leading-tight truncate" title={user.email}>{user.email}</p>
       </div>
     </div>
   )

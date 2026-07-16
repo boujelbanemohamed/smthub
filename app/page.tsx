@@ -380,7 +380,7 @@ export default function HomePage() {
     <div className="min-h-screen bg-app">
       {/* Facebook-style Header */}
       <header className="bg-surface border-b border-line shadow-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-none mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             {/* Logo plateforme + (si banque) logo de la banque et rôle */}
             <div className="flex items-center gap-3 min-w-0">
@@ -395,12 +395,13 @@ export default function HomePage() {
                   <div className="h-8 w-8 rounded-md bg-surface-muted border border-line flex items-center justify-center text-ink text-xs font-semibold shrink-0">{myBank.nom.charAt(0).toUpperCase()}</div>
                 )
               )}
-              <div className="hidden sm:flex flex-col leading-tight min-w-0">
+              <div className="hidden sm:flex flex-col leading-tight">
                 {user.banque_id != null && myBank && (
-                  <span className="text-ink font-medium text-sm truncate">{myBank.nom}</span>
+                  <span className="text-ink font-medium text-sm whitespace-nowrap">{myBank.nom}</span>
                 )}
-                <span className="text-[11px] font-bold text-red-600 truncate">
-                  Connecté en tant que {user.role === "admin"
+                <span className="text-[10px] text-red-500 whitespace-nowrap leading-none">Connecté en tant que</span>
+                <span className="text-xs font-bold text-red-600 whitespace-nowrap leading-tight">
+                  {user.role === "admin"
                     ? (user.banque_id != null ? "Administrateur de banque" : "Super administrateur")
                     : (user.banque_id != null ? "Utilisateur banque" : "Utilisateur")}
                 </span>
