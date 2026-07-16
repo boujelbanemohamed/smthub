@@ -1234,7 +1234,7 @@ export default function AdminPage() {
                           Nouvel utilisateur
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="bg-surface">
+                      <DialogContent className="bg-surface max-h-[85vh] overflow-y-auto">
                         <DialogHeader>
                           <DialogTitle className="text-ink">Créer un nouvel utilisateur</DialogTitle>
                         </DialogHeader>
@@ -1285,7 +1285,7 @@ export default function AdminPage() {
                               <Edit className="w-4 h-4" />
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="bg-surface">
+                          <DialogContent className="bg-surface max-h-[85vh] overflow-y-auto">
                             <DialogHeader>
                               <DialogTitle className="text-ink">Modifier l'utilisateur</DialogTitle>
                             </DialogHeader>
@@ -1433,7 +1433,7 @@ export default function AdminPage() {
                           Nouvelle application
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="bg-surface">
+                      <DialogContent className="bg-surface max-h-[85vh] overflow-y-auto">
                         <DialogHeader>
                           <DialogTitle className="text-ink">Créer une nouvelle application</DialogTitle>
                         </DialogHeader>
@@ -1499,7 +1499,7 @@ export default function AdminPage() {
                                 <Edit className="w-4 h-4" />
                               </Button>
                             </DialogTrigger>
-                            <DialogContent className="bg-surface">
+                            <DialogContent className="bg-surface max-h-[85vh] overflow-y-auto">
                               <DialogHeader>
                                 <DialogTitle className="text-ink">Modifier l'application</DialogTitle>
                               </DialogHeader>
