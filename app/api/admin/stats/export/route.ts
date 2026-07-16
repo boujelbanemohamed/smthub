@@ -2,7 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
 import { requireSuperAdmin, authErrorResponse } from "@/lib/auth"
-import { bankUserIds } from "@/lib/banks-store"
+import { bankUserIds, getBank, listBanks } from "@/lib/banks-store"
+import { aggregate } from "@/lib/stats-agg"
 
 const LOGS_FILE = path.join(process.cwd(), "data", "admin-logs.json")
 const USERS_FILE = path.join(process.cwd(), "data", "users.json")
@@ -36,19 +37,23 @@ export async function GET(request: NextRequest) {
     const userId = userIdParam && userIdParam !== "all" ? Number(userIdParam) : null
     const bqParam = params.get("banqueId") || ""
     let bankIds: Set<number> | null = null
+    let bankLabel = "Toutes"
     if (bqParam && bqParam !== "all" && !Number.isNaN(Number(bqParam))) {
       bankIds = await bankUserIds(Number(bqParam))
+      const bank = await getBank(Number(bqParam))
+      bankLabel = bank?.nom || `#${bqParam}`
     }
 
     let logs: any[] = []
     try { logs = JSON.parse(await fs.readFile(LOGS_FILE, "utf-8")) } catch { logs = [] }
 
+    let allUsers: any[] = []
+    try { allUsers = JSON.parse(await fs.readFile(USERS_FILE, "utf-8")) } catch { allUsers = [] }
+    const banks = await listBanks()
+
     let userLabel = "Tous"
     if (userId !== null) {
-      try {
-        const users = JSON.parse(await fs.readFile(USERS_FILE, "utf-8"))
-        userLabel = users.find((u: any) => u.id === userId)?.nom || `#${userId}`
-      } catch { userLabel = `#${userId}` }
+      userLabel = allUsers.find((u: any) => u.id === userId)?.nom || `#${userId}`
     }
 
     const opens = logs.filter(
@@ -59,19 +64,12 @@ export async function GET(request: NextRequest) {
         (bankIds === null || (typeof l.userId === "number" && bankIds.has(l.userId)))
     )
 
-    const byApp = new Map<string, { nom: string; count: number }>()
-    const byUser = new Map<number, { nom: string; count: number }>()
-    for (const l of opens) {
-      const nom = l.metadata?.appName ?? `Application ${l.metadata?.appId ?? "?"}`
-      const a = byApp.get(nom) || { nom, count: 0 }; a.count++; byApp.set(nom, a)
-      if (typeof l.userId === "number") {
-        const u = byUser.get(l.userId) || { nom: l.userName || `Utilisateur ${l.userId}`, count: 0 }
-        u.count++; u.nom = l.userName || u.nom; byUser.set(l.userId, u)
-      }
-    }
-    const topApps = Array.from(byApp.values()).sort((a, b) => b.count - a.count)
-    const topUsers = Array.from(byUser.values()).sort((a, b) => b.count - a.count)
-    const total = opens.length
+    const agg = aggregate(opens, allUsers, banks)
+    const topApps = agg.topApps
+    const topUsers = agg.topUsers
+    const total = agg.totalOpens
+    // Ventilation par banque : uniquement si aucun filtre banque n'est appliqué.
+    const noBankFilter = bankIds === null
     const pct = (n: number) => (total ? ((n / total) * 100).toFixed(1).replace(".", ",") + "%" : "0%")
     // Période datée : bornes des filtres, sinon dates réelles des données.
     let firstOpen: string | null = null, lastOpen: string | null = null
@@ -91,22 +89,53 @@ export async function GET(request: NextRequest) {
     const tdr = 'style="border:1px solid #ccc;padding:4px 8px;text-align:right"'
 
     const appRows = topApps.map((a, i) => `<tr><td ${td}>${i + 1}</td><td ${td}>${esc(a.nom)}</td><td ${tdr}>${a.count}</td><td ${tdr}>${pct(a.count)}</td></tr>`).join("")
-    const userRows = topUsers.map((u, i) => `<tr><td ${td}>${i + 1}</td><td ${td}>${esc(u.nom)}</td><td ${tdr}>${u.count}</td></tr>`).join("")
+
+    // Sections « par banque » (uniquement sans filtre banque)
+    let bankSections = ""
+    if (noBankFilter) {
+      // 1) Banques les plus actives
+      const bankRankRows = agg.byBank
+        .map((b, i) => `<tr><td ${td}>${i + 1}</td><td ${td}>${esc(b.nom)}</td><td ${tdr}>${b.count}</td><td ${tdr}>${pct(b.count)}</td></tr>`)
+        .join("")
+      bankSections += `
+<tr><td colspan="4"></td></tr>
+<tr><td colspan="4" ${th}>Banques les plus actives</td></tr>
+<tr><td ${hd}>Rang</td><td ${hd}>Banque</td><td ${hd}>Ouvertures</td><td ${hd}>Part (%)</td></tr>
+${bankRankRows || `<tr><td ${td} colspan="4">Aucune donnée</td></tr>`}`
+
+      // 2) Détail par banque : applications les plus ouvertes + utilisateurs classés
+      for (const bd of agg.bankDetails) {
+        const bAppRows = bd.topApps
+          .map((a, i) => `<tr><td ${td}>${i + 1}</td><td ${td} colspan="2">${esc(a.nom)}</td><td ${tdr}>${a.count}</td></tr>`)
+          .join("")
+        const bUserRows = bd.users
+          .map((u, i) => `<tr><td ${td}>${i + 1}</td><td ${td} colspan="2">${esc(u.nom)}</td><td ${tdr}>${u.count}</td></tr>`)
+          .join("")
+        bankSections += `
+<tr><td colspan="4"></td></tr>
+<tr><td colspan="4" ${th}>Banque : ${esc(bd.nom)} — ${bd.count} ouverture(s)</td></tr>
+<tr><td ${hd}>Rang</td><td ${hd} colspan="2">Application la plus ouverte</td><td ${hd}>Ouvertures</td></tr>
+${bAppRows || `<tr><td ${td} colspan="4">Aucune ouverture</td></tr>`}
+<tr><td ${hd}>Rang</td><td ${hd} colspan="2">Utilisateur (du plus actif au moins actif)</td><td ${hd}>Ouvertures</td></tr>
+${bUserRows || `<tr><td ${td} colspan="4">Aucun utilisateur</td></tr>`}`
+      }
+    }
 
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>
 <table>
 <tr><td colspan="4" style="font-size:16px;font-weight:bold;color:#217346">Monétique Tunisie — Statistiques d'usage</td></tr>
-<tr><td colspan="4">Période : ${esc(period)} | Utilisateur : ${esc(userLabel)}</td></tr>
-<tr><td colspan="4">Généré le ${esc(now)} — Total d'ouvertures : ${total}</td></tr>
+<tr><td colspan="4">Banque : ${esc(bankLabel)} | Période : ${esc(period)} | Utilisateur : ${esc(userLabel)}</td></tr>
+<tr><td colspan="4">Généré le ${esc(now)} — Total d'ouvertures : ${total} — Banques actives : ${agg.activeBanks}</td></tr>
 <tr><td colspan="4"></td></tr>
-<tr><td colspan="4" ${th}>Applications les plus ouvertes</td></tr>
+<tr><td colspan="4" ${th}>Applications les plus ouvertes (global)</td></tr>
 <tr><td ${hd}>Rang</td><td ${hd}>Application</td><td ${hd}>Ouvertures</td><td ${hd}>Part (%)</td></tr>
 ${appRows || `<tr><td ${td} colspan="4">Aucune donnée</td></tr>`}
 <tr><td ${hd} colspan="2">Total</td><td ${tdr} style="font-weight:bold">${total}</td><td ${tdr} style="font-weight:bold">${total ? "100%" : "0%"}</td></tr>
 <tr><td colspan="4"></td></tr>
-<tr><td colspan="4" ${th}>Utilisateurs les plus actifs</td></tr>
-<tr><td ${hd}>Rang</td><td ${hd}>Utilisateur</td><td ${hd}>Ouvertures</td></tr>
-${userRows || `<tr><td ${td} colspan="3">Aucune donnée</td></tr>`}
+<tr><td colspan="4" ${th}>Utilisateurs les plus actifs (global)</td></tr>
+<tr><td ${hd}>Rang</td><td ${hd} colspan="2">Utilisateur</td><td ${hd}>Ouvertures</td></tr>
+${topUsers.length ? topUsers.map((u, i) => `<tr><td ${td}>${i + 1}</td><td ${td} colspan="2">${esc(u.nom)}</td><td ${tdr}>${u.count}</td></tr>`).join("") : `<tr><td ${td} colspan="4">Aucune donnée</td></tr>`}
+${bankSections}
 </table></body></html>`
 
     return new NextResponse("﻿" + html, {

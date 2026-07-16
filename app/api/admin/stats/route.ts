@@ -2,9 +2,11 @@ import { type NextRequest, NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
 import { requireAdmin, authErrorResponse, isBankAdmin } from "@/lib/auth"
-import { bankUserIds } from "@/lib/banks-store"
+import { bankUserIds, listBanks } from "@/lib/banks-store"
+import { aggregate } from "@/lib/stats-agg"
 
 const LOGS_FILE = path.join(process.cwd(), "data", "admin-logs.json")
+const USERS_FILE = path.join(process.cwd(), "data", "users.json")
 
 function inRange(ts: string, startDate?: string | null, endDate?: string | null): boolean {
   const t = new Date(ts).getTime()
@@ -59,43 +61,29 @@ export async function GET(request: NextRequest) {
         (bankIds === null || (typeof l.userId === "number" && bankIds.has(l.userId)))
     )
 
-    const byApp = new Map<string, { appId: number; nom: string; count: number }>()
-    const byUser = new Map<number, { userId: number; nom: string; count: number }>()
-
-    for (const l of opens) {
-      const appId = l.metadata?.appId ?? -1
-      const appName = l.metadata?.appName ?? `Application ${appId}`
-      const keyApp = String(appId)
-      const a = byApp.get(keyApp) || { appId, nom: appName, count: 0 }
-      a.count++
-      a.nom = appName
-      byApp.set(keyApp, a)
-
-      if (typeof l.userId === "number") {
-        const u = byUser.get(l.userId) || { userId: l.userId, nom: l.userName || `Utilisateur ${l.userId}`, count: 0 }
-        u.count++
-        u.nom = l.userName || u.nom
-        byUser.set(l.userId, u)
-      }
+    let users: any[] = []
+    try {
+      users = JSON.parse(await fs.readFile(USERS_FILE, "utf-8"))
+    } catch {
+      users = []
     }
+    const banks = await listBanks()
 
-    const topApps = Array.from(byApp.values()).sort((a, b) => b.count - a.count)
-    const topUsers = Array.from(byUser.values()).sort((a, b) => b.count - a.count)
+    const agg = aggregate(opens, users, banks)
 
-    // Bornes réelles des données (pour afficher une période datée, sans « aujourd'hui »)
-    let firstOpen: string | null = null
-    let lastOpen: string | null = null
-    for (const l of opens) {
-      if (!firstOpen || l.timestamp < firstOpen) firstOpen = l.timestamp
-      if (!lastOpen || l.timestamp > lastOpen) lastOpen = l.timestamp
-    }
+    // La ventilation par banque n'a de sens que sans filtre banque : on ne
+    // l'expose (byBank / bankDetails) que dans ce cas (utilisée par l'export PDF).
+    const noBankFilter = bankIds === null && !isBankAdmin(me)
 
     return NextResponse.json({
-      totalOpens: opens.length,
-      topApps,
-      topUsers,
-      firstOpen,
-      lastOpen,
+      totalOpens: agg.totalOpens,
+      topApps: agg.topApps,
+      topUsers: agg.topUsers,
+      firstOpen: agg.firstOpen,
+      lastOpen: agg.lastOpen,
+      activeBanks: agg.activeBanks,
+      byBank: noBankFilter ? agg.byBank : null,
+      bankDetails: noBankFilter ? agg.bankDetails : null,
     })
   } catch (error) {
     return authErrorResponse(error) || NextResponse.json({ error: "Erreur serveur" }, { status: 500 })

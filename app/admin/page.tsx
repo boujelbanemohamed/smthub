@@ -4312,7 +4312,7 @@ function AnnouncementsPanel({ users }: { users: User[] }) {
 // Panneau : Statistiques d'usage
 // ---------------------------------------------------------------------------
 function StatsPanel({ applications, users, banks = [], isSuper = false }: { applications: Application[]; users: User[]; banks?: Bank[]; isSuper?: boolean }) {
-  const [data, setData] = useState<{ totalOpens: number; topApps: any[]; topUsers: any[]; firstOpen?: string | null; lastOpen?: string | null } | null>(null)
+  const [data, setData] = useState<{ totalOpens: number; topApps: any[]; topUsers: any[]; firstOpen?: string | null; lastOpen?: string | null; activeBanks?: number; byBank?: any[] | null; bankDetails?: any[] | null } | null>(null)
   const [startDate, setStartDate] = useState("")
   const [endDate, setEndDate] = useState("")
   const [userId, setUserId] = useState("all")
@@ -4334,6 +4334,7 @@ function StatsPanel({ applications, users, banks = [], isSuper = false }: { appl
   const maxApp = Math.max(1, ...(data?.topApps || []).map((a) => a.count))
 
   const userLabel = userId === "all" ? "Tous" : (users.find((u) => String(u.id) === userId)?.nom || userId)
+  const bankLabel = banqueId === "all" ? "Toutes" : (banks.find((b) => String(b.id) === banqueId)?.nom || banqueId)
   // Période toujours datée : bornes des filtres, sinon dates réelles des données, sinon date du jour.
   const dOnly = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString("fr-FR") : "")
   const startLabel = startDate ? new Date(startDate).toLocaleDateString("fr-FR") : (dOnly(data?.firstOpen) || new Date().toLocaleDateString("fr-FR"))
@@ -4402,7 +4403,7 @@ function StatsPanel({ applications, users, banks = [], isSuper = false }: { appl
 
     // Filtres
     doc.setTextColor(...ink); doc.setFontSize(10)
-    doc.text(`Période : ${periodLabel}      Utilisateur : ${userLabel}`, 32, 100)
+    doc.text(`${isSuper ? `Banque : ${bankLabel}      ` : ""}Période : ${periodLabel}      Utilisateur : ${userLabel}${isSuper && banqueId === "all" && data?.activeBanks != null ? `      Banques actives : ${data.activeBanks}` : ""}`, 32, 100)
 
     // KPI
     const kpis = [
@@ -4447,13 +4448,70 @@ function StatsPanel({ applications, users, banks = [], isSuper = false }: { appl
       margin: { left: 32, right: 32 },
     })
 
-    // Pied de page ancré en BAS de page (et non sous le tableau)
+    // Sections « par banque » : seulement sans filtre banque (super-admin).
     const H = doc.internal.pageSize.getHeight()
-    const footY = H - 40
-    doc.setDrawColor(230); doc.line(32, footY - 14, W - 32, footY - 14)
-    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(140, 150, 160)
-    doc.text("Monétique Tunisie - Rapport confidentiel", 32, footY)
-    doc.text("Page 1 / 1", W - 32, footY, { align: "right" })
+    const totalG = data.totalOpens || 0
+    const pctG = (n: number) => (totalG ? ((n / totalG) * 100).toFixed(1).replace(".", ",") + "%" : "0%")
+    const afterTableY = () => (doc as any).lastAutoTable?.finalY ?? y
+    const ensure = (need: number) => {
+      let cy = afterTableY()
+      if (cy + need > H - 60) { doc.addPage(); cy = 40 }
+      return cy
+    }
+    if (isSuper && banqueId === "all" && Array.isArray(data.byBank)) {
+      // Banques les plus actives
+      let cy = ensure(120)
+      doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(...ink)
+      doc.text("Banques les plus actives", 32, cy + 20)
+      autoTable(doc, {
+        startY: cy + 28,
+        head: [["Rang", "Banque", "Ouvertures", "Part (%)"]],
+        body: (data.byBank as any[]).map((b, i) => [String(i + 1), b.nom, String(b.count), pctG(b.count)]),
+        styles: { fontSize: 10, cellPadding: 6 },
+        headStyles: { fillColor: teal, halign: "left" },
+        columnStyles: { 2: { halign: "right" }, 3: { halign: "right" } },
+        margin: { left: 32, right: 32 },
+      })
+
+      // Détail par banque : applis les plus ouvertes + utilisateurs classés
+      for (const bd of (data.bankDetails as any[]) || []) {
+        let by = ensure(140)
+        doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(...ink)
+        doc.text(`Banque : ${bd.nom} — ${bd.count} ouverture(s)`, 32, by + 20)
+        autoTable(doc, {
+          startY: by + 28,
+          head: [["Rang", "Application la plus ouverte", "Ouvertures"]],
+          body: bd.topApps.length ? bd.topApps.map((a: any, i: number) => [String(i + 1), a.nom, String(a.count)]) : [["—", "Aucune ouverture", "0"]],
+          styles: { fontSize: 9, cellPadding: 5 },
+          headStyles: { fillColor: teal, halign: "left" },
+          columnStyles: { 2: { halign: "right" } },
+          margin: { left: 32, right: 32 },
+        })
+        const uy = afterTableY()
+        doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...ink)
+        doc.text("Utilisateurs (du plus actif au moins actif)", 32, uy + 18)
+        autoTable(doc, {
+          startY: uy + 24,
+          head: [["Rang", "Utilisateur", "Ouvertures"]],
+          body: bd.users.length ? bd.users.map((u: any, i: number) => [String(i + 1), u.nom, String(u.count)]) : [["—", "Aucun utilisateur", "0"]],
+          styles: { fontSize: 9, cellPadding: 5 },
+          headStyles: { fillColor: ink, halign: "left" },
+          columnStyles: { 2: { halign: "right" } },
+          margin: { left: 32, right: 32 },
+        })
+      }
+    }
+
+    // Pied de page ancré en BAS de CHAQUE page
+    const pageCount = doc.getNumberOfPages()
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i)
+      const footY = H - 40
+      doc.setDrawColor(230); doc.line(32, footY - 14, W - 32, footY - 14)
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(140, 150, 160)
+      doc.text("Monétique Tunisie - Rapport confidentiel", 32, footY)
+      doc.text(`Page ${i} / ${pageCount}`, W - 32, footY, { align: "right" })
+    }
 
     doc.save("statistiques-usage.pdf")
   }
