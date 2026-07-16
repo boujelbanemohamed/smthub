@@ -125,6 +125,7 @@ interface Bank {
   actif: boolean
   app_ids: number[]
   logo_url?: string | null
+  theme_color?: string | null
   created_at: string
 }
 
@@ -137,6 +138,7 @@ interface Application {
   avatar_color?: string
   category?: string
   open_mode?: "newtab" | "embed" | "embed_newtab"
+  status?: "available" | "maintenance"
 }
 
 interface UserAccess {
@@ -1145,7 +1147,7 @@ export default function AdminPage() {
                 Configuration Emails
               </TabsTrigger>
               )}
-              {isSuper && (
+              {(isSuper || isBankAdmin) && (
               <TabsTrigger
                 value="groups"
                 className="data-[state=active]:bg-brand data-[state=active]:text-white text-ink font-medium"
@@ -3202,6 +3204,7 @@ function AppCodeManager({ appId, appName }: { appId: number; appName: string }) 
 function BanksPanel({ banks, setBanks, applications }: { banks: Bank[]; setBanks: (b: Bank[]) => void; applications: Application[] }) {
   const [newName, setNewName] = useState("")
   const [newLogo, setNewLogo] = useState<string | null>(null)
+  const [newColor, setNewColor] = useState("")
   const [logoBusy, setLogoBusy] = useState(false)
   const [error, setError] = useState("")
   const [editId, setEditId] = useState<number | null>(null)
@@ -3210,6 +3213,33 @@ function BanksPanel({ banks, setBanks, applications }: { banks: Bank[]; setBanks
   const newLogoRef = useRef<HTMLInputElement>(null)
   const rowLogoRef = useRef<HTMLInputElement>(null)
   const [logoTarget, setLogoTarget] = useState<number | null>(null)
+  const importRef = useRef<HTMLInputElement>(null)
+  const [importResult, setImportResult] = useState<{ bank: any; createdUsers: any[]; skipped: string[] } | null>(null)
+  const [importBusy, setImportBusy] = useState(false)
+
+  const exportBank = (b: Bank) => { window.location.href = `/api/admin/banks/${b.id}/export` }
+
+  const onImportPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setError(""); setImportBusy(true)
+    try {
+      const text = await file.text()
+      const config = JSON.parse(text)
+      const res = await fetch("/api/admin/banks/import", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) { setImportResult(data); await reload() }
+      else setError(data.error || "Import impossible.")
+    } catch {
+      setError("Fichier JSON invalide.")
+    } finally {
+      setImportBusy(false)
+      if (importRef.current) importRef.current.value = ""
+    }
+  }
 
   const reload = async () => {
     const res = await fetch("/api/admin/banks")
@@ -3269,10 +3299,18 @@ function BanksPanel({ banks, setBanks, applications }: { banks: Bank[]; setBanks
     if (!nom) return
     const res = await fetch("/api/admin/banks", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nom, logo_url: newLogo }),
+      body: JSON.stringify({ nom, logo_url: newLogo, theme_color: newColor }),
     })
-    if (res.ok) { setNewName(""); setNewLogo(null); await reload() }
+    if (res.ok) { setNewName(""); setNewLogo(null); setNewColor(""); await reload() }
     else { const d = await res.json().catch(() => ({})); setError(d.error || "Erreur") }
+  }
+
+  const setBankColor = async (b: Bank, color: string | null) => {
+    const res = await fetch(`/api/admin/banks/${b.id}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme_color: color }),
+    })
+    if (res.ok) await reload()
   }
 
   const rename = async (id: number) => {
@@ -3337,6 +3375,11 @@ function BanksPanel({ banks, setBanks, applications }: { banks: Bank[]; setBanks
           <Input value={newName} onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); create() } }}
             placeholder="Nom de la banque…" className="max-w-xs bg-surface border-line text-ink" />
+          <label className="flex items-center gap-1.5 text-sm text-ink-muted" title="Couleur d'accent de la banque">
+            <span>Couleur</span>
+            <input type="color" value={newColor || "#1877f2"} onChange={(e) => setNewColor(e.target.value)}
+              className="h-8 w-10 rounded border border-line bg-surface cursor-pointer" />
+          </label>
           <Button onClick={create} className="bg-brand hover:bg-brand-hover text-white">
             <Plus className="w-4 h-4 mr-2" /> Ajouter
           </Button>
@@ -3344,6 +3387,38 @@ function BanksPanel({ banks, setBanks, applications }: { banks: Bank[]; setBanks
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
         {/* Champ caché partagé pour changer le logo d'une banque existante */}
         <input ref={rowLogoRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={onRowLogoPick} className="hidden" />
+
+        {/* Import d'une configuration de banque (JSON exporté) */}
+        <div className="flex items-center gap-2">
+          <input ref={importRef} type="file" accept="application/json,.json" onChange={onImportPick} className="hidden" />
+          <Button type="button" variant="outline" className="border-line text-ink" disabled={importBusy} onClick={() => importRef.current?.click()}>
+            <Upload className="w-4 h-4 mr-2" /> {importBusy ? "Import…" : "Importer une banque (JSON)"}
+          </Button>
+          <span className="text-xs text-ink-faint">Duplique une banque : applis + utilisateurs (mots de passe temporaires générés).</span>
+        </div>
+
+        {/* Résultat d'import : mots de passe temporaires à communiquer */}
+        {importResult && (
+          <div className="rounded-md border border-green-300 bg-green-50 p-3 text-sm">
+            <div className="flex items-center justify-between">
+              <p className="font-medium text-green-800">Banque « {importResult.bank?.nom} » importée — {importResult.createdUsers.length} utilisateur(s) créé(s).</p>
+              <button onClick={() => setImportResult(null)} className="text-green-700"><X className="w-4 h-4" /></button>
+            </div>
+            {importResult.createdUsers.length > 0 && (
+              <div className="mt-2 max-h-48 overflow-auto">
+                <p className="text-xs text-green-700 mb-1">Mots de passe temporaires (à communiquer, puis à faire changer) :</p>
+                <ul className="text-xs font-mono space-y-0.5">
+                  {importResult.createdUsers.map((u: any) => (
+                    <li key={u.email}>{u.email} → <strong>{u.tempPassword}</strong> ({u.role})</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {importResult.skipped.length > 0 && (
+              <p className="mt-2 text-xs text-amber-700">Ignorés (email déjà existant) : {importResult.skipped.join(", ")}</p>
+            )}
+          </div>
+        )}
 
         {banks.length === 0 ? (
           <p className="text-sm text-ink-muted">Aucune banque pour l'instant.</p>
@@ -3380,6 +3455,9 @@ function BanksPanel({ banks, setBanks, applications }: { banks: Bank[]; setBanks
                     <button onClick={() => setExpanded(expanded === b.id ? null : b.id)} className="text-xs text-brand px-2 py-1 border border-line rounded-md hover:bg-app">
                       Applications
                     </button>
+                    <input type="color" value={b.theme_color || "#1877f2"} onChange={(e) => setBankColor(b, e.target.value)}
+                      className="h-7 w-8 rounded border border-line bg-surface cursor-pointer p-0" title="Couleur d'accent" />
+                    <button onClick={() => exportBank(b)} className="p-1.5 text-ink-muted hover:text-brand" title="Exporter la configuration (JSON)"><Download className="w-4 h-4" /></button>
                     <button onClick={() => { setLogoTarget(b.id); rowLogoRef.current?.click() }} className="p-1.5 text-ink-muted hover:text-brand" title="Changer le logo"><Upload className="w-4 h-4" /></button>
                     {b.logo_url ? (
                       <button onClick={() => removeLogo(b)} className="p-1.5 text-ink-muted hover:text-amber-600" title="Retirer le logo"><X className="w-4 h-4" /></button>
@@ -3755,7 +3833,8 @@ function ApplicationForm({ application, onSubmit, categories = [] }: { applicati
     ordre_affichage: application?.ordre_affichage || 1,
     avatar_color: application?.avatar_color || "#1877f2",
     category: (application as any)?.category || "",
-    open_mode: ["embed", "embed_newtab"].includes((application as any)?.open_mode) ? (application as any).open_mode : "newtab"
+    open_mode: ["embed", "embed_newtab"].includes((application as any)?.open_mode) ? (application as any).open_mode : "newtab",
+    status: (application as any)?.status === "maintenance" ? "maintenance" : "available"
   })
   const [uploadingLogo, setUploadingLogo] = useState(false)
   const [logoError, setLogoError] = useState("")
@@ -3805,10 +3884,11 @@ function ApplicationForm({ application, onSubmit, categories = [] }: { applicati
         ordre_affichage: application.ordre_affichage || 1,
         avatar_color: application.avatar_color || "#1877f2",
         category: (application as any).category || "",
-        open_mode: ["embed", "embed_newtab"].includes((application as any).open_mode) ? (application as any).open_mode : "newtab"
+        open_mode: ["embed", "embed_newtab"].includes((application as any).open_mode) ? (application as any).open_mode : "newtab",
+        status: (application as any).status === "maintenance" ? "maintenance" : "available"
       })
     } else {
-      setFormData({ nom: "", app_url: "", image_url: "", ordre_affichage: 1, avatar_color: "#1877f2", category: "", open_mode: "newtab" })
+      setFormData({ nom: "", app_url: "", image_url: "", ordre_affichage: 1, avatar_color: "#1877f2", category: "", open_mode: "newtab", status: "available" })
     }
   }, [application])
 
@@ -3816,7 +3896,7 @@ function ApplicationForm({ application, onSubmit, categories = [] }: { applicati
     e.preventDefault()
     onSubmit(formData)
     if (!application) {
-      setFormData({ nom: "", app_url: "", image_url: "", ordre_affichage: 1, avatar_color: "#1877f2", category: "", open_mode: "newtab" })
+      setFormData({ nom: "", app_url: "", image_url: "", ordre_affichage: 1, avatar_color: "#1877f2", category: "", open_mode: "newtab", status: "available" })
     }
   }
 
@@ -3895,6 +3975,24 @@ function ApplicationForm({ application, onSubmit, categories = [] }: { applicati
         <p className="text-xs text-ink-faint mt-1">
           « Intégré » garde l'utilisateur dans le portail. À réserver aux applications qui autorisent l'affichage en iframe
           (souvent vos apps internes) ; les services externes type Google/Slack le bloquent et resteront en nouvel onglet.
+        </p>
+      </div>
+      <div>
+        <Label htmlFor="status" className="text-ink font-medium">
+          Statut
+          <span className="text-ink-muted font-normal text-sm ml-1">(affiché sur la carte de l'application)</span>
+        </Label>
+        <select
+          id="status"
+          value={(formData as any).status}
+          onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+          className="w-full px-3 py-2 border border-line rounded-md bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand transition-colors duration-200"
+        >
+          <option value="available">Disponible</option>
+          <option value="maintenance">En maintenance</option>
+        </select>
+        <p className="text-xs text-ink-faint mt-1">
+          En maintenance : un badge s'affiche sur la carte et l'ouverture est désactivée pour les utilisateurs.
         </p>
       </div>
       <div>

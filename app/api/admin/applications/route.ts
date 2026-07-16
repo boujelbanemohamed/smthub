@@ -15,6 +15,7 @@ interface Application {
   avatar_color?: string
   category?: string
   open_mode?: "newtab" | "embed" | "embed_newtab"
+  status?: "available" | "maintenance"
 }
 
 async function readApplications(): Promise<Application[]> {
@@ -103,7 +104,8 @@ export async function POST(request: NextRequest) {
       ordre_affichage: appData.ordre_affichage || applications.length + 1,
       avatar_color: appData.avatar_color || "",
       category: (appData.category || "").trim(),
-      open_mode: (["embed", "embed_newtab"].includes(appData.open_mode) ? appData.open_mode : "newtab") as "newtab" | "embed" | "embed_newtab"
+      open_mode: (["embed", "embed_newtab"].includes(appData.open_mode) ? appData.open_mode : "newtab") as "newtab" | "embed" | "embed_newtab",
+      status: (appData.status === "maintenance" ? "maintenance" : "available") as "available" | "maintenance",
     }
 
     applications.push(newApp)

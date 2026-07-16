@@ -9,6 +9,7 @@ export interface UserGroup {
   id: string
   nom: string
   member_ids: number[]
+  banque_id?: number | null
   created_at: string
 }
 
@@ -32,12 +33,13 @@ function normalizeIds(ids: unknown): number[] {
   return Array.from(new Set(ids.map((x) => Number(x)).filter((n) => !Number.isNaN(n))))
 }
 
-export async function addGroup(nom: string, memberIds: unknown): Promise<UserGroup> {
+export async function addGroup(nom: string, memberIds: unknown, banqueId?: number | null): Promise<UserGroup> {
   const items = await listGroups()
   const group: UserGroup = {
     id: `grp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     nom: nom.trim(),
     member_ids: normalizeIds(memberIds),
+    banque_id: banqueId ?? null,
     created_at: new Date().toISOString(),
   }
   items.unshift(group)

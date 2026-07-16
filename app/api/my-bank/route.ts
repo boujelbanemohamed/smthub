@@ -12,7 +12,7 @@ export async function GET() {
     if (me.banque_id == null) return NextResponse.json(null)
     const bank = await getBank(me.banque_id)
     if (!bank) return NextResponse.json(null)
-    return NextResponse.json({ id: bank.id, nom: bank.nom, logo_url: bank.logo_url ?? null })
+    return NextResponse.json({ id: bank.id, nom: bank.nom, logo_url: bank.logo_url ?? null, theme_color: bank.theme_color ?? null })
   } catch {
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 })
   }

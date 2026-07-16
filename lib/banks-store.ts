@@ -10,6 +10,7 @@ export interface Bank {
   actif: boolean
   app_ids: number[]
   logo_url?: string | null
+  theme_color?: string | null
   created_at: string
 }
 
@@ -34,7 +35,7 @@ export async function getBank(id: number): Promise<Bank | null> {
   return (await listBanks()).find((b) => b.id === id) || null
 }
 
-export async function addBank(nom: string, appIds: number[] = [], logoUrl?: string | null): Promise<Bank | { error: string }> {
+export async function addBank(nom: string, appIds: number[] = [], logoUrl?: string | null, themeColor?: string | null): Promise<Bank | { error: string }> {
   const clean = (nom || "").trim()
   if (!clean) return { error: "Nom requis" }
   const items = await listBanks()
@@ -47,6 +48,7 @@ export async function addBank(nom: string, appIds: number[] = [], logoUrl?: stri
     actif: true,
     app_ids: Array.isArray(appIds) ? appIds.map(Number).filter((n) => !Number.isNaN(n)) : [],
     logo_url: logoUrl || null,
+    theme_color: themeColor || null,
     created_at: new Date().toISOString(),
   }
   items.push(bank)
@@ -58,13 +60,14 @@ export async function addBank(nom: string, appIds: number[] = [], logoUrl?: stri
 // « inactif », on applique la même cascade que la suppression (voir plus bas).
 export async function updateBank(
   id: number,
-  fields: { nom?: string; app_ids?: number[]; actif?: boolean; logo_url?: string | null }
+  fields: { nom?: string; app_ids?: number[]; actif?: boolean; logo_url?: string | null; theme_color?: string | null }
 ): Promise<Bank | { error: string }> {
   const items = await listBanks()
   const bank = items.find((b) => b.id === id)
   if (!bank) return { error: "Banque introuvable" }
 
   if (fields.logo_url !== undefined) bank.logo_url = fields.logo_url || null
+  if (fields.theme_color !== undefined) bank.theme_color = fields.theme_color || null
 
   if (typeof fields.nom === "string" && fields.nom.trim()) {
     const clean = fields.nom.trim()

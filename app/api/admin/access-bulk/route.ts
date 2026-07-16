@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { promises as fs } from "fs"
 import path from "path"
-import { requireSuperAdmin, authErrorResponse } from "@/lib/auth"
+import { requireAdmin, authErrorResponse, isBankAdmin } from "@/lib/auth"
+import { getBank, bankUserIds } from "@/lib/banks-store"
 import { logAccessAction } from "@/lib/logger"
 
 const ACCESS_FILE = path.join(process.cwd(), "data", "user_access.json")
@@ -29,13 +30,25 @@ async function writeAccess(items: Access[]) {
 // d'utilisateurs — « donner accès à un lot d'apps à un groupe d'utilisateurs ».
 export async function POST(request: NextRequest) {
   try {
-    const admin = await requireSuperAdmin()
+    const admin = await requireAdmin()
     const { user_ids, application_ids, action } = await request.json()
 
     if (!Array.isArray(user_ids) || !Array.isArray(application_ids) || user_ids.length === 0 || application_ids.length === 0) {
       return NextResponse.json({ error: "Sélectionnez au moins un utilisateur et une application" }, { status: 400 })
     }
     const mode = action === "revoke" ? "revoke" : "grant"
+
+    // Cloisonnement : un admin de banque ne peut agir que sur les utilisateurs de
+    // sa banque et les applications qui lui sont attribuées.
+    let allowUser: (id: number) => boolean = () => true
+    let allowApp: (id: number) => boolean = () => true
+    if (isBankAdmin(admin)) {
+      const uids = await bankUserIds(admin.banque_id!)
+      const bank = await getBank(admin.banque_id!)
+      const apps = new Set(bank?.app_ids || [])
+      allowUser = (id) => uids.has(id)
+      allowApp = (id) => apps.has(id)
+    }
 
     let access = await readAccess()
     const has = (u: number, a: number) => access.some((x) => x.utilisateur_id === u && x.application_id === a)
@@ -45,6 +58,7 @@ export async function POST(request: NextRequest) {
       for (const a of application_ids) {
         const uid = Number(u), aid = Number(a)
         if (Number.isNaN(uid) || Number.isNaN(aid)) continue
+        if (!allowUser(uid) || !allowApp(aid)) continue
         if (mode === "grant") {
           if (!has(uid, aid)) {
             access.push({ utilisateur_id: uid, application_id: aid })

@@ -34,6 +34,7 @@ interface Application {
   category?: string
   // "embed" → ouverture dans le portail (iframe) ; sinon nouvel onglet.
   open_mode?: "newtab" | "embed" | "embed_newtab"
+  status?: "available" | "maintenance"
 }
 
 export default function HomePage() {
@@ -41,8 +42,48 @@ export default function HomePage() {
   const [applications, setApplications] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
   const [showWelcome, setShowWelcome] = useState(true)
-  const [myBank, setMyBank] = useState<{ id: number; nom: string; logo_url?: string | null } | null>(null)
+  const [myBank, setMyBank] = useState<{ id: number; nom: string; logo_url?: string | null; theme_color?: string | null } | null>(null)
   const router = useRouter()
+
+  // Thème par banque : applique la couleur d'accent de la banque de l'utilisateur
+  // en surchargeant les variables CSS de marque. Restauré au démontage.
+  useEffect(() => {
+    const color = myBank?.theme_color
+    if (!color) return
+    const root = document.documentElement
+    const prev = {
+      p: root.style.getPropertyValue("--fb-primary"),
+      h: root.style.getPropertyValue("--fb-primary-hover"),
+      l: root.style.getPropertyValue("--fb-primary-light"),
+    }
+    // Variante « hover » assombrie et « light » très claire, dérivées de l'accent.
+    const shade = (hex: string, pct: number) => {
+      const m = hex.replace("#", "")
+      if (m.length !== 6) return hex
+      const n = parseInt(m, 16)
+      const cl = (v: number) => Math.max(0, Math.min(255, Math.round(v)))
+      const r = cl(((n >> 16) & 255) * (1 + pct))
+      const g = cl(((n >> 8) & 255) * (1 + pct))
+      const b = cl((n & 255) * (1 + pct))
+      return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
+    }
+    const tint = (hex: string) => {
+      const m = hex.replace("#", "")
+      if (m.length !== 6) return hex
+      const n = parseInt(m, 16)
+      const mix = (v: number) => Math.round(v + (255 - v) * 0.88)
+      const r = mix((n >> 16) & 255), g = mix((n >> 8) & 255), b = mix(n & 255)
+      return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
+    }
+    root.style.setProperty("--fb-primary", color)
+    root.style.setProperty("--fb-primary-hover", shade(color, -0.12))
+    root.style.setProperty("--fb-primary-light", tint(color))
+    return () => {
+      root.style.setProperty("--fb-primary", prev.p)
+      root.style.setProperty("--fb-primary-hover", prev.h)
+      root.style.setProperty("--fb-primary-light", prev.l)
+    }
+  }, [myBank?.theme_color])
 
   // La bannière de bienvenue disparaît automatiquement après 2 minutes.
   useEffect(() => {
@@ -573,8 +614,11 @@ export default function HomePage() {
                       href={app.open_mode === "embed" || app.open_mode === "embed_newtab" ? `/embed/${app.id}` : app.app_url}
                       target={app.open_mode === "embed" || app.open_mode === "embed_newtab" ? undefined : "_blank"}
                       rel={app.open_mode === "embed" || app.open_mode === "embed_newtab" ? undefined : "noopener noreferrer"}
-                      className="group flex-1"
-                      onClick={() => {
+                      aria-disabled={app.status === "maintenance"}
+                      className={`group flex-1 ${app.status === "maintenance" ? "opacity-60 cursor-not-allowed" : ""}`}
+                      onClick={(e) => {
+                        // Application en maintenance : ouverture bloquée.
+                        if (app.status === "maintenance") { e.preventDefault(); return }
                         // Journalise l'ouverture (base des statistiques d'usage) — sans bloquer la navigation
                         fetch("/api/app-open", {
                           method: "POST",
@@ -590,11 +634,18 @@ export default function HomePage() {
                       <h3 className="font-medium text-ink text-sm line-clamp-2 group-hover:text-brand transition-colors duration-200">
                         {app.nom}
                       </h3>
-                      {(app.category || "").trim() ? (
-                        <span className="mt-1 inline-block rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-medium text-brand">
-                          {app.category}
-                        </span>
-                      ) : null}
+                      <div className="mt-1 flex flex-wrap items-center justify-center gap-1">
+                        {(app.category || "").trim() ? (
+                          <span className="inline-block rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-medium text-brand">
+                            {app.category}
+                          </span>
+                        ) : null}
+                        {app.status === "maintenance" ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 border border-amber-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> En maintenance
+                          </span>
+                        ) : null}
+                      </div>
                     </Link>
 
                     {/* Bouton coffre-fort d'identifiants */}

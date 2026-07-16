@@ -16,6 +16,7 @@ interface Application {
   avatar_color?: string
   category?: string
   open_mode?: "newtab" | "embed" | "embed_newtab"
+  status?: "available" | "maintenance"
 }
 
 async function readApplications(): Promise<Application[]> {
@@ -60,6 +61,9 @@ export async function PUT(
     }
 
     const updatedApp = { ...app, ...appData, id: appId }
+    if (appData.status !== undefined) {
+      updatedApp.status = appData.status === "maintenance" ? "maintenance" : "available"
+    }
     const index = applications.findIndex(a => a.id === appId)
     applications[index] = updatedApp
     await writeApplications(applications)
