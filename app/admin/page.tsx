@@ -4769,6 +4769,7 @@ function GroupsPanel({ users, applications, onApplied }: { users: User[]; applic
   const [newMembers, setNewMembers] = useState<number[]>([])
   const [editId, setEditId] = useState<string | null>(null)
   const [editMembers, setEditMembers] = useState<number[]>([])
+  const [editName, setEditName] = useState("")
   const [viewAccessId, setViewAccessId] = useState<string | null>(null)
   const [accessList, setAccessList] = useState<{ utilisateur_id: number; application_id: number }[]>([])
 
@@ -4801,10 +4802,11 @@ function GroupsPanel({ users, applications, onApplied }: { users: User[]; applic
     })
     if (res.ok) { setNewName(""); setNewMembers([]); await loadGroups() }
   }
-  const saveMembers = async (id: string) => {
+  const saveGroup = async (id: string) => {
+    if (!editName.trim()) return
     const res = await fetch("/api/admin/groups", {
       method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, member_ids: editMembers }),
+      body: JSON.stringify({ id, nom: editName, member_ids: editMembers }),
     })
     if (res.ok) { setEditId(null); await loadGroups() }
   }
@@ -4881,8 +4883,8 @@ function GroupsPanel({ users, applications, onApplied }: { users: User[]; applic
                   <Button variant="outline" size="sm" className="border-line text-ink" onClick={() => { setViewAccessId(viewAccessId === g.id ? null : g.id); loadAccess() }}>
                     {viewAccessId === g.id ? "Masquer les accès" : "Voir les accès"}
                   </Button>
-                  <Button variant="outline" size="sm" className="border-line text-ink" onClick={() => { setEditId(editId === g.id ? null : g.id); setEditMembers(g.member_ids) }}>
-                    {editId === g.id ? "Fermer" : "Membres"}
+                  <Button variant="outline" size="sm" className="border-line text-ink" onClick={() => { setEditId(editId === g.id ? null : g.id); setEditMembers(g.member_ids); setEditName(g.nom) }}>
+                    {editId === g.id ? "Fermer" : "Modifier"}
                   </Button>
                   <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => removeGroup(g.id)}>
                     <Trash2 className="w-4 h-4" />
@@ -4922,6 +4924,11 @@ function GroupsPanel({ users, applications, onApplied }: { users: User[]; applic
                 )}
                 {editId === g.id && (
                   <div className="mt-3 space-y-2">
+                    <div>
+                      <p className="text-sm text-ink-muted mb-1">Nom du groupe :</p>
+                      <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="bg-surface border-line text-ink" />
+                    </div>
+                    <p className="text-sm text-ink-muted">Membres :</p>
                     <div className="space-y-1 max-h-40 overflow-auto border border-line rounded-md p-2">
                       {standardUsers.map((u) => (
                         <label key={u.id} className="flex items-center gap-2 text-sm text-ink cursor-pointer py-1">
@@ -4930,7 +4937,7 @@ function GroupsPanel({ users, applications, onApplied }: { users: User[]; applic
                         </label>
                       ))}
                     </div>
-                    <Button size="sm" onClick={() => saveMembers(g.id)} className="bg-brand hover:bg-brand-hover text-white">Enregistrer les membres</Button>
+                    <Button size="sm" disabled={!editName.trim()} onClick={() => saveGroup(g.id)} className="bg-brand hover:bg-brand-hover text-white">Enregistrer</Button>
                   </div>
                 )}
               </div>
