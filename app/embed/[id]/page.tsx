@@ -7,6 +7,7 @@ import { ArrowLeft, ExternalLink } from "lucide-react"
 import { AppAvatar } from "@/components/ui/app-avatar"
 import { BrandLogo } from "@/components/brand-logo"
 import { BankHeaderInfo } from "@/components/bank-header-info"
+import { UserHeaderInfo } from "@/components/user-header-info"
 
 interface App {
   id: number
@@ -94,12 +95,15 @@ export default function EmbedPage() {
           {app ? <AppAvatar app={app as any} size={24} /> : null}
           <span className="font-medium text-ink truncate">{app?.nom}</span>
         </div>
-        {app && app.open_mode === "embed_newtab" ? (
-          <a href={app.app_url} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-brand transition-colors shrink-0">
-            <ExternalLink className="w-4 h-4" /> Nouvel onglet
-          </a>
-        ) : null}
+        <div className="flex items-center gap-3 shrink-0">
+          {app && app.open_mode === "embed_newtab" ? (
+            <a href={app.app_url} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-sm text-ink-muted hover:text-brand transition-colors shrink-0">
+              <ExternalLink className="w-4 h-4" /> Nouvel onglet
+            </a>
+          ) : null}
+          <UserHeaderInfo size={28} />
+        </div>
       </header>
 
       {/* Cadre de l'application */}

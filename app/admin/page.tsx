@@ -49,6 +49,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { UserAvatar } from "@/components/ui/user-avatar"
 import { BrandLogo } from "@/components/brand-logo"
 import { BankHeaderInfo } from "@/components/bank-header-info"
+import { UserHeaderInfo } from "@/components/user-header-info"
 
 // Composant pour l'avatar d'application avec fallback
 function AppAvatar({ app, size = 48 }: { app: Application, size?: number }) {
@@ -997,7 +998,8 @@ export default function AdminPage() {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-3">
+              <UserHeaderInfo />
               <ThemeToggle />
               <Link href="/">
                 <Button className="bg-brand hover:bg-brand-hover text-white font-medium px-4 py-2 rounded-md transition-colors duration-200 text-sm">

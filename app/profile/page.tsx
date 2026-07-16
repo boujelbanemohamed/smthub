@@ -12,6 +12,7 @@ import { PageLoader } from "@/components/loading-spinner"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { BrandLogo } from "@/components/brand-logo"
 import { BankHeaderInfo } from "@/components/bank-header-info"
+import { UserHeaderInfo } from "@/components/user-header-info"
 import { UserAvatar } from "@/components/ui/user-avatar"
 
 interface User {
@@ -215,7 +216,8 @@ export default function ProfilePage() {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-3">
+              <UserHeaderInfo />
               <ThemeToggle />
               <Link href="/">
                 <Button className="bg-surface-muted hover:bg-surface-muted text-ink font-medium px-4 py-2 rounded-md transition-colors duration-200 text-sm">
