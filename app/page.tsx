@@ -387,22 +387,24 @@ export default function HomePage() {
               <div className="flex-shrink-0">
                 <BrandLogo height={32} />
               </div>
+              <span className="h-8 w-px bg-line hidden sm:block" aria-hidden />
               {user.banque_id != null && myBank && (
-                <>
-                  <span className="h-8 w-px bg-line hidden sm:block" aria-hidden />
-                  {myBank.logo_url ? (
-                    <img src={myBank.logo_url} alt={myBank.nom} className="h-8 w-8 rounded-md object-contain border border-line bg-white shrink-0" />
-                  ) : (
-                    <div className="h-8 w-8 rounded-md bg-surface-muted border border-line flex items-center justify-center text-ink text-xs font-semibold shrink-0">{myBank.nom.charAt(0).toUpperCase()}</div>
-                  )}
-                  <div className="hidden sm:flex flex-col leading-tight min-w-0">
-                    <span className="text-ink font-medium text-sm truncate">{myBank.nom}</span>
-                    <span className="text-[11px] font-bold text-red-600 truncate">
-                      Connecté en tant que {user.role === "admin" ? "Administrateur de banque" : "Utilisateur banque"}
-                    </span>
-                  </div>
-                </>
+                myBank.logo_url ? (
+                  <img src={myBank.logo_url} alt={myBank.nom} className="h-8 w-8 rounded-md object-contain border border-line bg-white shrink-0" />
+                ) : (
+                  <div className="h-8 w-8 rounded-md bg-surface-muted border border-line flex items-center justify-center text-ink text-xs font-semibold shrink-0">{myBank.nom.charAt(0).toUpperCase()}</div>
+                )
               )}
+              <div className="hidden sm:flex flex-col leading-tight min-w-0">
+                {user.banque_id != null && myBank && (
+                  <span className="text-ink font-medium text-sm truncate">{myBank.nom}</span>
+                )}
+                <span className="text-[11px] font-bold text-red-600 truncate">
+                  Connecté en tant que {user.role === "admin"
+                    ? (user.banque_id != null ? "Administrateur de banque" : "Super administrateur")
+                    : (user.banque_id != null ? "Utilisateur banque" : "Utilisateur")}
+                </span>
+              </div>
             </div>
 
             {/* User Menu */}
