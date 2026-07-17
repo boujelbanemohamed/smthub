@@ -223,6 +223,10 @@ export default function AdminPage() {
 
   // États pour les templates d'emails modérables
   const [emailTemplateConfig, setEmailTemplateConfig] = useState<any>(null)
+  // Snapshot des derniers paramètres enregistrés (pour lister ce qui a changé)
+  const savedSettingsRef = useRef<any>(null)
+  // Pop-up de résultat de l'enregistrement des paramètres
+  const [settingsResult, setSettingsResult] = useState<{ ok: boolean; messages: string[] } | null>(null)
   const [selectedTemplate, setSelectedTemplate] = useState<string>("")
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
   const [testEmailDialogOpen, setTestEmailDialogOpen] = useState(false)
@@ -800,6 +804,7 @@ export default function AdminPage() {
       if (response.ok) {
         const config = await response.json()
         setEmailTemplateConfig(config)
+        savedSettingsRef.current = { ...(config?.settings || {}) }
       }
     } catch (error) {
       console.error("Erreur lors du chargement des templates:", error)
@@ -827,21 +832,63 @@ export default function AdminPage() {
   }
 
   const handleUpdateSettings = async (settings: any) => {
+    // Libellés lisibles des champs de paramètres
+    const labels: Record<string, string> = {
+      companyName: "Nom de l'entreprise",
+      supportEmail: "Email de support",
+      websiteUrl: "URL du site web",
+      logoUrl: "URL du logo",
+      logoUpload: "Logo téléversé",
+      primaryColor: "Couleur primaire",
+      secondaryColor: "Couleur secondaire",
+    }
+
+    // Validation
+    const errors: string[] = []
+    if (!String(settings.companyName || "").trim()) errors.push("Le nom de l'entreprise est obligatoire.")
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!String(settings.supportEmail || "").trim()) errors.push("L'email de support est obligatoire.")
+    else if (!emailRe.test(String(settings.supportEmail).trim())) errors.push("L'email de support n'est pas valide.")
+    if (String(settings.websiteUrl || "").trim() && !/^https?:\/\/.+/i.test(String(settings.websiteUrl).trim()))
+      errors.push("L'URL du site web doit commencer par http:// ou https://.")
+    if (String(settings.logoUrl || "").trim() && !/^https?:\/\/.+/i.test(String(settings.logoUrl).trim()))
+      errors.push("L'URL du logo doit commencer par http:// ou https://.")
+    const hexRe = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
+    if (settings.primaryColor && !hexRe.test(settings.primaryColor)) errors.push("La couleur primaire est invalide.")
+    if (settings.secondaryColor && !hexRe.test(settings.secondaryColor)) errors.push("La couleur secondaire est invalide.")
+
+    if (errors.length > 0) {
+      setSettingsResult({ ok: false, messages: errors })
+      return
+    }
+
+    // Champs modifiés par rapport au dernier enregistrement
+    const base = savedSettingsRef.current || {}
+    const changed: string[] = []
+    for (const key of Object.keys(labels)) {
+      if (String(settings[key] ?? "") !== String(base[key] ?? "")) changed.push(labels[key])
+    }
+
     try {
       const response = await fetch("/api/email-templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "updateSettings",
-          data: settings
-        })
+        body: JSON.stringify({ action: "updateSettings", data: settings }),
       })
 
       if (response.ok) {
         await loadEmailTemplates()
+        setSettingsResult({
+          ok: true,
+          messages: changed.length > 0 ? changed : ["Aucune modification à enregistrer."],
+        })
+      } else {
+        const d = await response.json().catch(() => ({}))
+        setSettingsResult({ ok: false, messages: [d.error || "Échec de l'enregistrement des paramètres."] })
       }
     } catch (error) {
       console.error("Erreur lors de la mise à jour des paramètres:", error)
+      setSettingsResult({ ok: false, messages: ["Erreur réseau lors de l'enregistrement."] })
     }
   }
 
@@ -1052,6 +1099,28 @@ export default function AdminPage() {
           </div>
         </div>
       </header>
+
+      {/* Pop-up de résultat de l'enregistrement des paramètres emails */}
+      <Dialog open={!!settingsResult} onOpenChange={(o) => { if (!o) setSettingsResult(null) }}>
+        <DialogContent className="bg-surface max-w-md">
+          <DialogHeader>
+            <DialogTitle className={settingsResult?.ok ? "text-green-700" : "text-red-600"}>
+              {settingsResult?.ok ? "✅ Paramètres enregistrés" : "❌ Enregistrement impossible"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="text-sm text-ink">
+              {settingsResult?.ok ? "Les paramètres suivants ont été mis à jour :" : "Veuillez corriger les points suivants :"}
+            </p>
+            <ul className="list-disc pl-5 space-y-1 text-sm text-ink-muted">
+              {(settingsResult?.messages || []).map((m, i) => <li key={i}>{m}</li>)}
+            </ul>
+            <div className="flex justify-end pt-2">
+              <Button onClick={() => setSettingsResult(null)} className="bg-brand hover:bg-brand-hover text-white">Fermer</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
