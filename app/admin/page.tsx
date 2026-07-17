@@ -4426,20 +4426,43 @@ function StatsPanel({ applications, users, banks = [], isSuper = false }: { appl
   }, [])
 
   // Rapports planifiés par email (super-admin)
-  const [reportCfg, setReportCfg] = useState<{ enabled: boolean; frequency: "weekly" | "monthly"; hour: number } | null>(null)
+  type ReportSections = { topApps: boolean; topUsers: boolean; byCategory: boolean; unusedApps: boolean; byHour: boolean; banks: boolean }
+  type ReportCfg = { enabled: boolean; frequency: "weekly" | "monthly"; hour: number; disabledRecipients: string[]; sections: ReportSections }
+  const [reportCfg, setReportCfg] = useState<ReportCfg | null>(null)
+  const [reportRecipients, setReportRecipients] = useState<{ email: string; nom: string; scope: string }[]>([])
   const [reportMsg, setReportMsg] = useState("")
   const [reportBusy, setReportBusy] = useState(false)
   useEffect(() => {
     if (!isSuper) return
-    fetch("/api/admin/reports/config").then((r) => r.ok ? r.json() : null).then((c) => { if (c) setReportCfg({ enabled: !!c.enabled, frequency: c.frequency === "monthly" ? "monthly" : "weekly", hour: c.hour ?? 7 }) }).catch(() => {})
+    fetch("/api/admin/reports/config").then((r) => r.ok ? r.json() : null).then((c) => {
+      if (c) setReportCfg({
+        enabled: !!c.enabled,
+        frequency: c.frequency === "monthly" ? "monthly" : "weekly",
+        hour: c.hour ?? 7,
+        disabledRecipients: Array.isArray(c.disabledRecipients) ? c.disabledRecipients : [],
+        sections: { topApps: true, topUsers: true, byCategory: true, unusedApps: true, byHour: true, banks: true, ...(c.sections || {}) },
+      })
+    }).catch(() => {})
+    fetch("/api/admin/reports/recipients").then((r) => r.ok ? r.json() : null).then((d) => setReportRecipients(d?.recipients || [])).catch(() => {})
   }, [isSuper])
-  const saveReportCfg = async (patch: Partial<{ enabled: boolean; frequency: "weekly" | "monthly"; hour: number }>) => {
+  const saveReportCfg = async (patch: Partial<ReportCfg>) => {
     if (!reportCfg) return
     const next = { ...reportCfg, ...patch }
     setReportCfg(next); setReportMsg("")
     const res = await fetch("/api/admin/reports/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) })
     if (res.ok) setReportMsg("Configuration enregistrée.")
   }
+  const toggleRecipient = (email: string, enabled: boolean) => {
+    if (!reportCfg) return
+    const set = new Set(reportCfg.disabledRecipients.map((e) => e.toLowerCase()))
+    if (enabled) set.delete(email.toLowerCase()); else set.add(email.toLowerCase())
+    saveReportCfg({ disabledRecipients: Array.from(set) })
+  }
+  const toggleSection = (key: keyof ReportSections, val: boolean) => {
+    if (!reportCfg) return
+    saveReportCfg({ sections: { ...reportCfg.sections, [key]: val } })
+  }
+  const isRecipientEnabled = (email: string) => !reportCfg?.disabledRecipients.some((e) => e.toLowerCase() === email.toLowerCase())
   const sendReportNow = async () => {
     setReportBusy(true); setReportMsg("")
     try {
@@ -4841,6 +4864,47 @@ function StatsPanel({ applications, users, banks = [], isSuper = false }: { appl
                 {reportBusy ? "Envoi…" : "Envoyer maintenant (test)"}
               </Button>
             </div>
+
+            {/* Destinataires : activer/désactiver chacun individuellement */}
+            <div className="border-t border-line pt-4">
+              <p className="text-sm font-medium text-ink mb-1">Destinataires</p>
+              <p className="text-xs text-ink-faint mb-2">Décochez un destinataire pour ne pas lui envoyer le rapport (ex. exclure une banque ou le super-admin). La liste s'ajuste automatiquement aux administrateurs existants.</p>
+              {reportRecipients.length === 0 ? (
+                <p className="text-sm text-ink-muted">Aucun administrateur avec email.</p>
+              ) : (
+                <div className="space-y-1 max-h-48 overflow-auto border border-line rounded-md p-2">
+                  {reportRecipients.map((r) => (
+                    <label key={r.email} className="flex items-center gap-2 text-sm text-ink cursor-pointer py-1">
+                      <input type="checkbox" checked={isRecipientEnabled(r.email)} onChange={(e) => toggleRecipient(r.email, e.target.checked)} className="h-4 w-4 accent-[var(--brand,#1877f2)]" />
+                      <span className="font-medium">{r.nom}</span>
+                      <span className="text-ink-faint">({r.email})</span>
+                      <span className="ml-auto text-xs rounded-full bg-surface-muted text-ink px-2 py-0.5">{r.scope}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Contenu du rapport : sections à inclure */}
+            <div className="border-t border-line pt-4">
+              <p className="text-sm font-medium text-ink mb-2">Contenu du rapport</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
+                {([
+                  ["topApps", "Applications les plus ouvertes"],
+                  ["topUsers", "Utilisateurs les plus actifs"],
+                  ["byCategory", "Ouvertures par catégorie"],
+                  ["unusedApps", "Applications jamais utilisées"],
+                  ["byHour", "Répartition par heure"],
+                  ["banks", "Classement des banques (rapport global)"],
+                ] as [keyof ReportSections, string][]).map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 text-sm text-ink cursor-pointer py-1">
+                    <input type="checkbox" checked={reportCfg.sections[key]} onChange={(e) => toggleSection(key, e.target.checked)} className="h-4 w-4 accent-[var(--brand,#1877f2)]" />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
             {reportMsg && <p className="text-sm text-ink-muted">{reportMsg}</p>}
             <p className="text-xs text-ink-faint">Nécessite un serveur SMTP configuré (onglet « Configuration Emails »).</p>
           </CardContent>

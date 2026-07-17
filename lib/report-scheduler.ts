@@ -1,6 +1,6 @@
 import { promises as fs } from "fs"
 import path from "path"
-import { getReportConfig, saveReportConfig, isReportDue, type ReportConfig } from "./report-config"
+import { getReportConfig, saveReportConfig, isReportDue, type ReportConfig, type ReportSections } from "./report-config"
 import { aggregate } from "./stats-agg"
 import { buildReportXls } from "./stats-excel"
 import { listBanks } from "./banks-store"
@@ -30,21 +30,27 @@ function periodBounds(freq: ReportConfig["frequency"]): { since: number; label: 
 }
 
 // Envoie les rapports : un rapport global aux super-admins, un rapport par banque
-// aux admins de chaque banque.
-export async function sendReports(freq: ReportConfig["frequency"]): Promise<number> {
+// aux admins de chaque banque. `disabled` = emails exclus, `sections` = contenu.
+export async function sendReports(
+  freq: ReportConfig["frequency"],
+  disabled: string[] = [],
+  sections?: ReportSections
+): Promise<number> {
   const [logs, users, apps, banks] = await Promise.all([
     readJson(LOGS_FILE), readJson(USERS_FILE), readJson(APPLICATIONS_FILE), listBanks(),
   ])
   const { since, label } = periodBounds(freq)
   const opens = logs.filter((l: any) => l.action === "Ouverture application" && new Date(l.timestamp).getTime() >= since)
   const titre = freq === "monthly" ? "Rapport mensuel de statistiques" : "Rapport hebdomadaire de statistiques"
+  const excluded = new Set(disabled.map((e) => String(e).toLowerCase()))
+  const isExcluded = (email: string) => excluded.has(String(email).toLowerCase())
   let sent = 0
 
-  // 1) Rapport global → super-admins (admin sans banque)
-  const supers = users.filter((u: any) => u.role === "admin" && (u.banque_id == null) && u.actif !== false && u.email)
+  // 1) Rapport global → super-admins (admin sans banque), hors exclus
+  const supers = users.filter((u: any) => u.role === "admin" && (u.banque_id == null) && u.actif !== false && u.email && !isExcluded(u.email))
   if (supers.length > 0) {
     const agg = aggregate(opens, users, banks, apps)
-    const xls = buildReportXls(agg, { titre, periode: label, banque: "Toutes", includeBanks: true })
+    const xls = buildReportXls(agg, { titre, periode: label, banque: "Toutes", includeBanks: true, sections })
     for (const s of supers) {
       const ok = await sendEmail({
         to: s.email,
@@ -56,15 +62,15 @@ export async function sendReports(freq: ReportConfig["frequency"]): Promise<numb
     }
   }
 
-  // 2) Rapport par banque → admins de la banque
+  // 2) Rapport par banque → admins de la banque, hors exclus
   for (const bank of banks) {
-    const bankAdmins = users.filter((u: any) => u.role === "admin" && u.banque_id === bank.id && u.actif !== false && u.email)
+    const bankAdmins = users.filter((u: any) => u.role === "admin" && u.banque_id === bank.id && u.actif !== false && u.email && !isExcluded(u.email))
     if (bankAdmins.length === 0) continue
     const bankUserIds = new Set(users.filter((u: any) => u.banque_id === bank.id).map((u: any) => u.id))
     const bankOpens = opens.filter((l: any) => typeof l.userId === "number" && bankUserIds.has(l.userId))
     const bankApps = apps.filter((a: any) => (bank.app_ids || []).includes(a.id))
     const agg = aggregate(bankOpens, users, banks, bankApps)
-    const xls = buildReportXls(agg, { titre, periode: label, banque: bank.nom, includeBanks: false })
+    const xls = buildReportXls(agg, { titre, periode: label, banque: bank.nom, includeBanks: false, sections })
     for (const a of bankAdmins) {
       const ok = await sendEmail({
         to: a.email,
@@ -101,7 +107,7 @@ async function tick(): Promise<void> {
   try {
     const cfg = await getReportConfig()
     if (!isReportDue(new Date(), cfg)) return
-    const n = await sendReports(cfg.frequency)
+    const n = await sendReports(cfg.frequency, cfg.disabledRecipients, cfg.sections)
     await saveReportConfig({ ...cfg, lastSent: new Date().toISOString() })
     console.log(`[report-scheduler] Rapport ${cfg.frequency} envoyé (${n} email(s)).`)
   } catch (e) {

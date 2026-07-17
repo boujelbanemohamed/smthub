@@ -23,7 +23,7 @@ export async function PUT(request: NextRequest) {
     const cfg = await getReportConfig()
 
     if (body.sendNow) {
-      const n = await sendReports(body.frequency === "monthly" ? "monthly" : cfg.frequency)
+      const n = await sendReports(body.frequency === "monthly" ? "monthly" : cfg.frequency, cfg.disabledRecipients, cfg.sections)
       await logAction("Rapport envoyé", `Envoi manuel du rapport (${n} email(s))`, "INFO", admin.id, admin.nom)
       return NextResponse.json({ success: true, sent: n })
     }
@@ -33,7 +33,11 @@ export async function PUT(request: NextRequest) {
       frequency: body.frequency === "monthly" ? "monthly" : body.frequency === "weekly" ? "weekly" : cfg.frequency,
       hour: Number.isFinite(body.hour) ? Math.max(0, Math.min(23, Math.floor(body.hour))) : cfg.hour,
       lastSent: cfg.lastSent ?? null,
-    } as const
+      disabledRecipients: Array.isArray(body.disabledRecipients)
+        ? body.disabledRecipients.map((e: any) => String(e)).filter(Boolean)
+        : cfg.disabledRecipients,
+      sections: body.sections && typeof body.sections === "object" ? { ...cfg.sections, ...body.sections } : cfg.sections,
+    }
     await saveReportConfig(next)
     await logAction("Rapports planifiés", `Config: ${next.enabled ? "activé" : "désactivé"}, ${next.frequency}, ${next.hour}h`, "INFO", admin.id, admin.nom)
     return NextResponse.json(next)
