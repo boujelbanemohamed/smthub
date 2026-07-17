@@ -48,6 +48,14 @@ export async function POST(request: NextRequest) {
         accessDate: new Date().toLocaleString('fr-FR'),
         companyName: "SMT HUB",
         supportEmail: "support@smt.com"
+      },
+      report: {
+        userName: "Jean Dupont",
+        titre: "Rapport hebdomadaire de statistiques",
+        periode: "01/07/2026 → 08/07/2026",
+        total: "128",
+        banque: "BIAT",
+        companyName: "SMT HUB"
       }
     }
 

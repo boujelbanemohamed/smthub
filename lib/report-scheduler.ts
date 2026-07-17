@@ -5,6 +5,7 @@ import { aggregate } from "./stats-agg"
 import { buildReportXls } from "./stats-excel"
 import { listBanks } from "./banks-store"
 import { sendEmail } from "./email-service"
+import { generateEmailFromTemplate } from "./email-templates"
 
 const LOGS_FILE = path.join(process.cwd(), "data", "admin-logs.json")
 const USERS_FILE = path.join(process.cwd(), "data", "users.json")
@@ -52,10 +53,12 @@ export async function sendReports(
     const agg = aggregate(opens, users, banks, apps)
     const xls = buildReportXls(agg, { titre, periode: label, banque: "Toutes", includeBanks: true, sections })
     for (const s of supers) {
+      const mail = await buildReportEmail({ userName: s.nom, titre, periode: label, total: String(agg.totalOpens), banque: "Toutes" })
       const ok = await sendEmail({
         to: s.email,
-        subject: `📊 ${titre} — Monétique Tunisie`,
-        html: reportEmailHtml(s.nom, titre, label, agg.totalOpens),
+        subject: mail.subject,
+        html: mail.html,
+        text: mail.text,
         attachments: [{ filename: `statistiques-${freq}.xls`, content: "﻿" + xls, contentType: "application/vnd.ms-excel" }],
       })
       if (ok) sent++
@@ -72,16 +75,29 @@ export async function sendReports(
     const agg = aggregate(bankOpens, users, banks, bankApps)
     const xls = buildReportXls(agg, { titre, periode: label, banque: bank.nom, includeBanks: false, sections })
     for (const a of bankAdmins) {
+      const mail = await buildReportEmail({ userName: a.nom, titre, periode: label, total: String(agg.totalOpens), banque: bank.nom })
       const ok = await sendEmail({
         to: a.email,
-        subject: `📊 ${titre} — ${bank.nom}`,
-        html: reportEmailHtml(a.nom, titre, label, agg.totalOpens, bank.nom),
+        subject: mail.subject,
+        html: mail.html,
+        text: mail.text,
         attachments: [{ filename: `statistiques-${bank.nom.replace(/[^a-zA-Z0-9_-]+/g, "_")}-${freq}.xls`, content: "﻿" + xls, contentType: "application/vnd.ms-excel" }],
       })
       if (ok) sent++
     }
   }
   return sent
+}
+
+// Construit l'email d'accompagnement à partir du modèle éditable « report »
+// (onglet Configuration Emails). Repli sur un modèle codé en dur si absent.
+async function buildReportEmail(vars: { userName: string; titre: string; periode: string; total: string; banque: string }): Promise<{ subject: string; html: string; text?: string }> {
+  const gen = await generateEmailFromTemplate("report", vars)
+  if (gen) return gen
+  return {
+    subject: `📊 ${vars.titre} — Monétique Tunisie`,
+    html: reportEmailHtml(vars.userName, vars.titre, vars.periode, Number(vars.total) || 0, vars.banque === "Toutes" ? undefined : vars.banque),
+  }
 }
 
 function reportEmailHtml(nom: string, titre: string, periode: string, total: number, banque?: string): string {

@@ -331,6 +331,43 @@ Ce message a été généré automatiquement.
     variables: ["userName", "appName", "adminName", "accessDate", "companyName", "supportEmail"],
     description: "Email envoyé lors du retrait d'un accès",
     category: "access"
+  },
+  {
+    id: "report",
+    name: "Rapport de statistiques (planifié)",
+    subject: "📊 {{titre}} - {{companyName}}",
+    html: `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background: linear-gradient(135deg, {{primaryColor}} 0%, {{secondaryColor}} 100%); padding: 24px; text-align: center;">
+        <h1 style="color: white; margin: 0; font-size: 24px;">{{companyName}}</h1>
+      </div>
+      <div style="padding: 24px; background: #f8fafc;">
+        <h2 style="color: {{primaryColor}}; margin-top: 0;">{{titre}}</h2>
+        <p style="color: #475569;">Bonjour {{userName}},</p>
+        <p style="color: #475569; line-height: 1.6;">
+          Veuillez trouver ci-joint le rapport de statistiques d'usage de la banque <strong>{{banque}}</strong> pour la période <strong>{{periode}}</strong>.
+        </p>
+        <p style="color: #475569;">Total d'ouvertures sur la période : <strong>{{total}}</strong>.</p>
+        <p style="color: #64748b; font-size: 13px;">Le détail complet est dans le fichier Excel joint (applications, utilisateurs, catégories, heures de pointe, applications non utilisées).</p>
+      </div>
+      <div style="padding: 16px; text-align: center; background: #1e293b; color: #94a3b8;">
+        <p style="margin: 0; font-size: 13px;">{{companyName}} - Rapport généré automatiquement.</p>
+      </div>
+    </div>
+    `,
+    text: `{{companyName}} - {{titre}}
+
+Bonjour {{userName}},
+
+Veuillez trouver ci-joint le rapport de statistiques d'usage de la banque {{banque}} pour la période {{periode}}.
+Total d'ouvertures sur la période : {{total}}.
+
+Le détail complet est dans le fichier Excel joint.
+
+{{companyName}} - Rapport généré automatiquement.`,
+    variables: ["userName", "titre", "periode", "total", "banque", "companyName"],
+    description: "Email d'accompagnement des rapports de statistiques envoyés automatiquement (le fichier Excel est joint).",
+    category: "system"
   }
 ]
 
@@ -347,7 +384,17 @@ const defaultSettings = {
 export async function getEmailTemplates(): Promise<EmailTemplateConfig> {
   try {
     const data = await fs.readFile(TEMPLATES_FILE, "utf-8")
-    return JSON.parse(data)
+    const config: EmailTemplateConfig = JSON.parse(data)
+    // Fusion des modèles par défaut manquants (ex. nouveau modèle « report »
+    // ajouté après coup) : on ajoute ceux dont l'id n'existe pas encore, sans
+    // écraser les personnalisations des modèles déjà présents.
+    const existingIds = new Set((config.templates || []).map((t) => t.id))
+    const missing = defaultTemplates.filter((t) => !existingIds.has(t.id))
+    if (missing.length > 0) {
+      config.templates = [...(config.templates || []), ...missing]
+      await saveEmailTemplates(config)
+    }
+    return config
   } catch {
     // Retourner les templates par défaut si le fichier n'existe pas
     const defaultConfig: EmailTemplateConfig = {
