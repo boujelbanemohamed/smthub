@@ -593,6 +593,27 @@ export default function AdminPage() {
   // Import / Export CSV
   const usersImportRef = useRef<HTMLInputElement>(null)
   const appsImportRef = useRef<HTMLInputElement>(null)
+  // Téléversement du logo des emails (paramètres généraux des templates)
+  const emailLogoRef = useRef<HTMLInputElement>(null)
+  const handleEmailLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const fd = new FormData()
+      fd.append("image", file)
+      const res = await fetch("/api/upload", { method: "POST", body: fd })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.url) {
+        setEmailTemplateConfig((prev: any) => prev ? { ...prev, settings: { ...prev.settings, logoUpload: data.url } } : prev)
+      } else {
+        alert(data.error || "Échec du téléversement du logo.")
+      }
+    } catch {
+      alert("Erreur lors du téléversement du logo.")
+    } finally {
+      if (emailLogoRef.current) emailLogoRef.current.value = ""
+    }
+  }
 
   // Libellé + style du tag de rôle, en distinguant les 4 profils :
   // super-admin, admin de banque, utilisateur de banque, utilisateur (hors banque).
@@ -2031,6 +2052,31 @@ export default function AdminPage() {
                         />
                       </div>
                       <div>
+                        <Label className="text-ink font-medium">Logo téléversé</Label>
+                        <div className="flex items-center gap-3 mt-1">
+                          {emailTemplateConfig.settings.logoUpload ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={emailTemplateConfig.settings.logoUpload} alt="Logo" className="h-10 w-10 rounded object-contain border border-line bg-white" />
+                          ) : (
+                            <div className="h-10 w-10 rounded border border-dashed border-line flex items-center justify-center text-[10px] text-ink-faint">Logo</div>
+                          )}
+                          <input ref={emailLogoRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={handleEmailLogoUpload} className="hidden" />
+                          <Button type="button" variant="outline" className="border-line text-ink" onClick={() => emailLogoRef.current?.click()}>
+                            <Upload className="w-4 h-4 mr-2" /> {emailTemplateConfig.settings.logoUpload ? "Changer" : "Téléverser"}
+                          </Button>
+                          {emailTemplateConfig.settings.logoUpload && (
+                            <Button type="button" variant="ghost" className="text-ink-muted" onClick={() => {
+                              const newConfig = { ...emailTemplateConfig }
+                              newConfig.settings.logoUpload = ""
+                              setEmailTemplateConfig(newConfig)
+                            }}>Retirer</Button>
+                          )}
+                        </div>
+                        <p className="text-xs text-ink-faint mt-1">
+                          Si un logo est téléversé, il est <strong>prioritaire</strong> sur l'URL du logo. N'oubliez pas d'enregistrer les paramètres.
+                        </p>
+                      </div>
+                      <div>
                         <Label htmlFor="primaryColor" className="text-ink font-medium">Couleur primaire</Label>
                         <Input
                           id="primaryColor"
@@ -2060,7 +2106,7 @@ export default function AdminPage() {
                       </div>
                     </div>
                     <Button
-                      onClick={handleUpdateSettings}
+                      onClick={() => handleUpdateSettings(emailTemplateConfig.settings)}
                       className="bg-brand hover:bg-brand-hover text-white"
                     >
                       <Save className="w-4 h-4 mr-2" />

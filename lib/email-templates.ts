@@ -19,6 +19,9 @@ interface EmailTemplateConfig {
     supportEmail: string
     websiteUrl: string
     logoUrl: string
+    // Logo téléversé (chemin /uploads/...). S'il est renseigné, il est
+    // PRIORITAIRE sur logoUrl dans les emails.
+    logoUpload?: string
     primaryColor: string
     secondaryColor: string
   }
@@ -376,6 +379,7 @@ const defaultSettings = {
   supportEmail: "support@smt.com",
   websiteUrl: "http://localhost:4000",
   logoUrl: "",
+  logoUpload: "",
   primaryColor: "#1e40af",
   secondaryColor: "#3b82f6"
 }
@@ -390,8 +394,12 @@ export async function getEmailTemplates(): Promise<EmailTemplateConfig> {
     // écraser les personnalisations des modèles déjà présents.
     const existingIds = new Set((config.templates || []).map((t) => t.id))
     const missing = defaultTemplates.filter((t) => !existingIds.has(t.id))
-    if (missing.length > 0) {
+    // Backfill des clés de paramètres manquantes (ex. logoUpload ajouté après coup).
+    const mergedSettings = { ...defaultSettings, ...(config.settings || {}) }
+    const settingsChanged = JSON.stringify(mergedSettings) !== JSON.stringify(config.settings)
+    if (missing.length > 0 || settingsChanged) {
       config.templates = [...(config.templates || []), ...missing]
+      config.settings = mergedSettings
       await saveEmailTemplates(config)
     }
     return config
@@ -460,11 +468,18 @@ export async function generateEmailFromTemplate(
   if (!template) return null
   
   const config = await getEmailTemplates()
-  const allVariables = { ...config.settings, ...variables }
-  
+
+  // Logo effectif : le logo TÉLÉVERSÉ est prioritaire sur l'URL. Pour les emails,
+  // on rend le chemin absolu (les clients mail ne gèrent pas les liens relatifs).
+  const rawLogo = config.settings.logoUpload || config.settings.logoUrl || ""
+  const base = (config.settings.websiteUrl || process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "")
+  const effectiveLogo = rawLogo.startsWith("/") && base ? base + rawLogo : rawLogo
+
+  const allVariables = { ...config.settings, ...variables, logoUrl: effectiveLogo }
+
   return {
     subject: replaceTemplateVariables(template.subject, allVariables),
     html: replaceTemplateVariables(template.html, allVariables),
     text: replaceTemplateVariables(template.text, allVariables)
   }
-} 
+}
