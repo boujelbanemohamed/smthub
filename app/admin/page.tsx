@@ -225,8 +225,10 @@ export default function AdminPage() {
   const [emailTemplateConfig, setEmailTemplateConfig] = useState<any>(null)
   // Snapshot des derniers paramètres enregistrés (pour lister ce qui a changé)
   const savedSettingsRef = useRef<any>(null)
-  // Pop-up de résultat de l'enregistrement des paramètres
-  const [settingsResult, setSettingsResult] = useState<{ ok: boolean; messages: string[] } | null>(null)
+  const savedSmtpRef = useRef<any>(null)
+  const savedTemplatesRef = useRef<any>(null)
+  // Pop-up de résultat d'un enregistrement (paramètres, SMTP, template…)
+  const [settingsResult, setSettingsResult] = useState<{ ok: boolean; messages: string[]; title?: string } | null>(null)
   const [selectedTemplate, setSelectedTemplate] = useState<string>("")
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
   const [testEmailDialogOpen, setTestEmailDialogOpen] = useState(false)
@@ -374,21 +376,44 @@ export default function AdminPage() {
 
   // Fonctions pour gérer la configuration SMTP
   const handleSaveSmtpConfig = async () => {
+    const labels: Record<string, string> = {
+      host: "Serveur SMTP", port: "Port", user: "Nom d'utilisateur",
+      from_name: "Nom de l'expéditeur", from_email: "Email de l'expéditeur", secure: "SSL/TLS",
+    }
+    // Validation
+    const errors: string[] = []
+    if (!String(smtpConfig.host || "").trim()) errors.push("Le serveur SMTP est obligatoire.")
+    const port = Number(smtpConfig.port)
+    if (!smtpConfig.port || Number.isNaN(port) || port < 1 || port > 65535) errors.push("Le port doit être un nombre entre 1 et 65535.")
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!String(smtpConfig.from_email || "").trim()) errors.push("L'email de l'expéditeur est obligatoire.")
+    else if (!emailRe.test(String(smtpConfig.from_email).trim())) errors.push("L'email de l'expéditeur n'est pas valide.")
+    if (!String(smtpConfig.user || "").trim()) errors.push("Le nom d'utilisateur SMTP est obligatoire.")
+    if (errors.length > 0) { setSettingsResult({ ok: false, title: "Configuration SMTP : impossible", messages: errors }); return }
+
+    // Champs modifiés
+    const base = savedSmtpRef.current
+    const changed: string[] = []
+    for (const key of Object.keys(labels)) {
+      if (!base || String((smtpConfig as any)[key] ?? "") !== String(base[key] ?? "")) changed.push(labels[key])
+    }
+
     try {
       const response = await fetch("/api/admin/smtp-config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(smtpConfig)
       })
-
       if (response.ok) {
-        alert("Configuration SMTP sauvegardée avec succès !")
+        savedSmtpRef.current = { ...smtpConfig }
+        setSettingsResult({ ok: true, title: "Configuration SMTP enregistrée", messages: changed.length > 0 ? changed : ["Aucune modification à enregistrer."] })
       } else {
-        alert("Erreur lors de la sauvegarde de la configuration SMTP")
+        const d = await response.json().catch(() => ({}))
+        setSettingsResult({ ok: false, title: "Configuration SMTP : impossible", messages: [d.error || "Échec de la sauvegarde de la configuration SMTP."] })
       }
     } catch (error) {
       console.error("Erreur lors de la sauvegarde SMTP:", error)
-      alert("Erreur lors de la sauvegarde de la configuration SMTP")
+      setSettingsResult({ ok: false, title: "Configuration SMTP : impossible", messages: ["Erreur réseau lors de la sauvegarde."] })
     }
   }
 
@@ -412,21 +437,54 @@ export default function AdminPage() {
   }
 
   const handleSaveEmailTemplates = async () => {
-    try {
-      const response = await fetch("/api/admin/email-templates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(emailTemplates)
-      })
+    const labels: Record<string, string> = {
+      user_created: "Email de création de compte",
+      user_updated: "Email de modification de profil",
+      app_access_granted: "Email d'accès à une nouvelle application",
+    }
+    // Validation : sujet obligatoire pour les templates activés
+    const errors: string[] = []
+    for (const key of Object.keys(labels)) {
+      const t = (emailTemplates as any)[key]
+      if (t?.enabled && !String(t.subject || "").trim()) errors.push(`Le sujet de « ${labels[key]} » ne peut pas être vide.`)
+    }
+    if (errors.length > 0) { setSettingsResult({ ok: false, title: "Modèles d'emails : impossible", messages: errors }); return }
 
-      if (response.ok) {
-        alert("Templates d'emails sauvegardés avec succès !")
+    // Champs modifiés
+    const base = savedTemplatesRef.current
+    const changed: string[] = []
+    for (const key of Object.keys(labels)) {
+      const cur = (emailTemplates as any)[key], b = base?.[key]
+      if (!base || cur?.subject !== b?.subject || cur?.enabled !== b?.enabled) changed.push(labels[key])
+    }
+
+    // Correspondance des 3 sujets de cette section vers les vrais modèles.
+    const idMap: Record<string, string> = {
+      user_created: "welcome",
+      user_updated: "profile-update",
+      app_access_granted: "access-granted",
+    }
+    try {
+      const failed: string[] = []
+      for (const key of Object.keys(idMap)) {
+        const subject = String((emailTemplates as any)[key]?.subject || "")
+        const res = await fetch("/api/email-templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "updateTemplate", data: { id: idMap[key], updates: { subject } } }),
+        })
+        if (!res.ok) failed.push(labels[key])
+      }
+      if (failed.length === 0) {
+        savedTemplatesRef.current = JSON.parse(JSON.stringify(emailTemplates))
+        await loadEmailTemplates()
+        setSettingsResult({ ok: true, title: "Modèles d'emails enregistrés", messages: changed.length > 0 ? changed : ["Aucune modification à enregistrer."] })
       } else {
-        alert("Erreur lors de la sauvegarde des templates")
+        setSettingsResult({ ok: false, title: "Modèles d'emails : impossible", messages: failed.map((l) => `Échec de l'enregistrement : ${l}.`) })
       }
     } catch (error) {
       console.error("Erreur lors de la sauvegarde des templates:", error)
-      alert("Erreur lors de la sauvegarde des templates d'emails")
+      setSettingsResult({ ok: false, title: "Modèles d'emails : impossible", messages: ["Erreur réseau lors de la sauvegarde."] })
     }
   }
 
@@ -812,6 +870,21 @@ export default function AdminPage() {
   }
 
   const handleUpdateTemplate = async (templateId: string, updates: any) => {
+    const current = emailTemplateConfig?.templates?.find((t: any) => t.id === templateId)
+    const tplName = current?.name || templateId
+    // Validation
+    const errors: string[] = []
+    if (updates.subject !== undefined && !String(updates.subject).trim()) errors.push("Le sujet ne peut pas être vide.")
+    if (updates.html !== undefined && !String(updates.html).trim()) errors.push("Le contenu HTML ne peut pas être vide.")
+    if (errors.length > 0) { setSettingsResult({ ok: false, title: `Modèle « ${tplName} » : impossible`, messages: errors }); return }
+
+    // Champs modifiés
+    const fieldLabels: Record<string, string> = { subject: "Sujet", html: "Contenu HTML", text: "Version texte" }
+    const changed: string[] = []
+    for (const key of Object.keys(fieldLabels)) {
+      if (updates[key] !== undefined && String(updates[key]) !== String(current?.[key] ?? "")) changed.push(fieldLabels[key])
+    }
+
     try {
       const response = await fetch("/api/email-templates", {
         method: "POST",
@@ -825,9 +898,14 @@ export default function AdminPage() {
       if (response.ok) {
         await loadEmailTemplates()
         setTemplateDialogOpen(false)
+        setSettingsResult({ ok: true, title: `Modèle « ${tplName} » enregistré`, messages: changed.length > 0 ? changed : ["Aucune modification à enregistrer."] })
+      } else {
+        const d = await response.json().catch(() => ({}))
+        setSettingsResult({ ok: false, title: `Modèle « ${tplName} » : impossible`, messages: [d.error || "Échec de l'enregistrement du modèle."] })
       }
     } catch (error) {
       console.error("Erreur lors de la mise à jour du template:", error)
+      setSettingsResult({ ok: false, title: `Modèle « ${tplName} » : impossible`, messages: ["Erreur réseau lors de l'enregistrement."] })
     }
   }
 
@@ -1105,7 +1183,7 @@ export default function AdminPage() {
         <DialogContent className="bg-surface max-w-md">
           <DialogHeader>
             <DialogTitle className={settingsResult?.ok ? "text-green-700" : "text-red-600"}>
-              {settingsResult?.ok ? "✅ Paramètres enregistrés" : "❌ Enregistrement impossible"}
+              {(settingsResult?.ok ? "✅ " : "❌ ") + (settingsResult?.title || (settingsResult?.ok ? "Paramètres enregistrés" : "Enregistrement impossible"))}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
