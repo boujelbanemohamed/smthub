@@ -4,6 +4,7 @@ import path from "path"
 import { requireAdmin, authErrorResponse, isBankAdmin } from "@/lib/auth"
 import { getBank, bankUserIds } from "@/lib/banks-store"
 import { logAccessAction } from "@/lib/logger"
+import { notify } from "@/lib/notifications-store"
 
 const ACCESS_FILE = path.join(process.cwd(), "data", "user_access.json")
 
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest) {
     const has = (u: number, a: number) => access.some((x) => x.utilisateur_id === u && x.application_id === a)
 
     let changed = 0
+    const perUser = new Map<number, number>() // utilisateur → nb d'accès modifiés
     for (const u of user_ids) {
       for (const a of application_ids) {
         const uid = Number(u), aid = Number(a)
@@ -62,18 +64,27 @@ export async function POST(request: NextRequest) {
         if (mode === "grant") {
           if (!has(uid, aid)) {
             access.push({ utilisateur_id: uid, application_id: aid })
-            changed++
+            changed++; perUser.set(uid, (perUser.get(uid) || 0) + 1)
           }
         } else {
           if (has(uid, aid)) {
             access = access.filter((x) => !(x.utilisateur_id === uid && x.application_id === aid))
-            changed++
+            changed++; perUser.set(uid, (perUser.get(uid) || 0) + 1)
           }
         }
       }
     }
 
     await writeAccess(access)
+    // Notifie chaque utilisateur concerné (résumé).
+    for (const [uid, n] of perUser) {
+      await notify(uid, {
+        type: mode === "grant" ? "access_granted" : "access_revoked",
+        message: mode === "grant"
+          ? `${n} nouvel(le)(s) accès à des applications vous ${n > 1 ? "ont" : "a"} été accordé(s).`
+          : `${n} accès à des applications vous ${n > 1 ? "ont" : "a"} été retiré(s).`,
+      })
+    }
     await logAccessAction(
       mode === "grant" ? "Accord d'accès groupé" : "Révocation d'accès groupée",
       0,

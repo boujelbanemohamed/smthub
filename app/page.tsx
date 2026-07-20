@@ -9,11 +9,12 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { LogOut, Settings, User, KeyRound, Eye, EyeOff, Copy, Trash2, Plus, Pencil, X, Star, Search, BarChart3 } from "lucide-react"
+import { LogOut, Settings, User, KeyRound, Eye, EyeOff, Copy, Trash2, Plus, Pencil, X, Star, Search, BarChart3, Activity } from "lucide-react"
 import { PageLoader } from "@/components/loading-spinner"
 import { AppAvatar } from "@/components/ui/app-avatar"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { BrandLogo } from "@/components/brand-logo"
+import { NotificationsBell } from "@/components/notifications-bell"
 import { UserAvatar } from "@/components/ui/user-avatar"
 
 interface User {
@@ -43,6 +44,10 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true)
   const [showWelcome, setShowWelcome] = useState(true)
   const [myBank, setMyBank] = useState<{ id: number; nom: string; logo_url?: string | null; theme_color?: string | null } | null>(null)
+  // Ordre personnel des applications (glisser-déposer) + récemment ouvertes
+  const [personalOrder, setPersonalOrder] = useState<number[]>([])
+  const [recent, setRecent] = useState<number[]>([])
+  const [dragId, setDragId] = useState<number | null>(null)
   const router = useRouter()
 
   // Thème par banque : applique la couleur d'accent de la banque de l'utilisateur
@@ -133,7 +138,7 @@ export default function HomePage() {
 
   // Top 5 des applications les plus utilisées (personnel pour l'utilisateur,
   // global tous utilisateurs pour l'admin).
-  const [topApps, setTopApps] = useState<{ scope: string; top: any[] } | null>(null)
+  const [topApps, setTopApps] = useState<{ scope: string; top: any[]; personal?: any[] } | null>(null)
   const loadTopApps = async () => {
     try {
       const res = await fetch("/api/top-apps")
@@ -188,6 +193,43 @@ export default function HomePage() {
       /* en cas d'échec, on recharge l'état réel */
       loadFavorites()
     }
+  }
+
+  // --- Ordre personnel (glisser-déposer) ---
+  const orderIndex = (id: number) => {
+    const i = personalOrder.indexOf(id)
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i
+  }
+  const saveOrder = async (ids: number[]) => {
+    setPersonalOrder(ids)
+    try {
+      await fetch("/api/app-order", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ order: ids }) })
+    } catch { /* silencieux */ }
+  }
+  const resetOrder = async () => {
+    setPersonalOrder([])
+    try {
+      await fetch("/api/app-order", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reset: true }) })
+    } catch { /* silencieux */ }
+  }
+  // Liste complète des ids d'applications dans l'ordre courant (perso puis ordre admin)
+  const fullOrderedIds = () =>
+    [...applications]
+      .sort((a, b) => {
+        const ia = orderIndex(a.id), ib = orderIndex(b.id)
+        if (ia !== ib) return ia - ib
+        return a.ordre_affichage - b.ordre_affichage
+      })
+      .map((a) => a.id)
+  const handleDropOn = (targetId: number) => {
+    if (dragId == null || dragId === targetId) { setDragId(null); return }
+    const ids = fullOrderedIds()
+    const from = ids.indexOf(dragId), to = ids.indexOf(targetId)
+    if (from < 0 || to < 0) { setDragId(null); return }
+    const [moved] = ids.splice(from, 1)
+    ids.splice(to, 0, moved)
+    saveOrder(ids)
+    setDragId(null)
   }
 
   // Coffre-fort : app_ids ayant un identifiant enregistré + état du dialogue
@@ -340,6 +382,9 @@ export default function HomePage() {
           authData.user?.banque_id != null
             ? fetch("/api/my-bank").then((r) => (r.ok ? r.json() : null)).then(setMyBank).catch(() => {})
             : Promise.resolve(),
+          // Ordre personnel des applications + récemment ouvertes
+          fetch("/api/app-order").then((r) => (r.ok ? r.json() : null)).then((d) => setPersonalOrder(d?.order || [])).catch(() => {}),
+          fetch("/api/recent-apps").then((r) => (r.ok ? r.json() : null)).then((d) => setRecent(d?.recent || [])).catch(() => {}),
         ])
       } catch (error) {
         console.error("Erreur lors du chargement:", error)
@@ -420,7 +465,14 @@ export default function HomePage() {
 
               {/* Action Buttons */}
               <div className="flex items-center space-x-2">
+                <NotificationsBell />
                 <ThemeToggle />
+                <Link href="/my-activity">
+                  <Button className="bg-surface-muted hover:bg-surface-muted text-ink font-medium px-4 py-2 rounded-md transition-colors duration-200 text-sm">
+                    <Activity className="w-4 h-4 mr-2" />
+                    Mon activité
+                  </Button>
+                </Link>
                 <Link href="/profile">
                   <Button className="bg-surface-muted hover:bg-surface-muted text-ink font-medium px-4 py-2 rounded-md transition-colors duration-200 text-sm">
                     <User className="w-4 h-4 mr-2" />
@@ -502,26 +554,72 @@ export default function HomePage() {
         })}
 
         {/* Statistiques : 5 applications les plus utilisées */}
-        {topApps && topApps.top.length > 0 && (() => {
-          const max = Math.max(1, ...topApps.top.map((a: any) => a.count))
-          return (
-            <section className="mb-8 bg-surface rounded-lg border border-line shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)] p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <BarChart3 className="w-5 h-5 text-brand" />
-                <h3 className="text-lg font-bold text-ink">
-                  {topApps.scope === "global" ? "Top 5 des applications les plus utilisées" : "Vos 5 applications les plus utilisées"}
-                </h3>
-              </div>
-              <div className="space-y-2">
-                {topApps.top.map((a: any, i: number) => (
-                  <div key={a.appId} className="flex items-center gap-3">
-                    <span className="w-5 text-sm font-semibold text-ink-muted">{i + 1}</span>
-                    <span className="w-40 truncate text-sm text-ink">{a.nom}</span>
-                    <div className="flex-1 bg-surface-muted rounded-full h-3 overflow-hidden">
-                      <div className="bg-brand h-3 rounded-full" style={{ width: `${(a.count / max) * 100}%` }} />
+        {topApps && (() => {
+          const renderTop = (title: string, list: any[], key: string) => {
+            if (!list || list.length === 0) return null
+            const max = Math.max(1, ...list.map((a: any) => a.count))
+            return (
+              <section key={key} className="mb-8 bg-surface rounded-lg border border-line shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)] p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <BarChart3 className="w-5 h-5 text-brand" />
+                  <h3 className="text-lg font-bold text-ink">{title}</h3>
+                </div>
+                <div className="space-y-2">
+                  {list.map((a: any, i: number) => (
+                    <div key={a.appId} className="flex items-center gap-3">
+                      <span className="w-5 text-sm font-semibold text-ink-muted">{i + 1}</span>
+                      <span className="w-40 truncate text-sm text-ink">{a.nom}</span>
+                      <div className="flex-1 bg-surface-muted rounded-full h-3 overflow-hidden">
+                        <div className="bg-brand h-3 rounded-full" style={{ width: `${(a.count / max) * 100}%` }} />
+                      </div>
+                      <span className="w-16 text-right text-sm font-medium text-ink">{a.count} ouv.</span>
                     </div>
-                    <span className="w-16 text-right text-sm font-medium text-ink">{a.count} ouv.</span>
-                  </div>
+                  ))}
+                </div>
+              </section>
+            )
+          }
+          const mainTitle =
+            topApps.scope === "global"
+              ? "Top 5 des applications les plus utilisées"
+              : topApps.scope === "bank"
+                ? "Top 5 des applications de votre banque"
+                : "Vos 5 applications les plus utilisées"
+          return (
+            <>
+              {renderTop(mainTitle, topApps.top, "main")}
+              {/* Pour les admins (super-admin / admin de banque) : leur propre top personnel en plus. */}
+              {topApps.scope !== "personal" &&
+                renderTop("Vos 5 applications les plus utilisées", topApps.personal || [], "personal")}
+            </>
+          )
+        })()}
+
+        {/* Applications récemment ouvertes */}
+        {(() => {
+          const recentApps = recent
+            .map((id) => applications.find((a) => a.id === id))
+            .filter(Boolean) as Application[]
+          if (recentApps.length === 0) return null
+          return (
+            <section className="mb-8">
+              <h3 className="text-sm font-semibold text-ink-muted mb-3">Récemment utilisées</h3>
+              <div className="flex flex-wrap gap-3">
+                {recentApps.map((app) => (
+                  <Link
+                    key={app.id}
+                    href={app.open_mode === "embed" || app.open_mode === "embed_newtab" ? `/embed/${app.id}` : app.app_url}
+                    target={app.open_mode === "embed" || app.open_mode === "embed_newtab" ? undefined : "_blank"}
+                    rel={app.open_mode === "embed" || app.open_mode === "embed_newtab" ? undefined : "noopener noreferrer"}
+                    onClick={(e) => {
+                      if (app.status === "maintenance") { e.preventDefault(); return }
+                      fetch("/api/app-open", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ application_id: app.id, nom: app.nom }), keepalive: true }).catch(() => {})
+                    }}
+                    className={`inline-flex items-center gap-2 bg-surface border border-line rounded-full pl-1.5 pr-4 py-1.5 shadow-sm hover:shadow transition-shadow ${app.status === "maintenance" ? "opacity-60 cursor-not-allowed" : ""}`}
+                  >
+                    <AppAvatar app={app} size={28} />
+                    <span className="text-sm font-medium text-ink">{app.nom}</span>
+                  </Link>
                 ))}
               </div>
             </section>
@@ -536,6 +634,9 @@ export default function HomePage() {
               <span className="inline-flex items-center justify-center min-w-[1.5rem] h-6 px-2 rounded-full bg-surface-muted text-ink-muted text-sm font-semibold">
                 {applications.length}
               </span>
+              {personalOrder.length > 0 && (
+                <button onClick={resetOrder} className="text-xs text-brand hover:underline">Réinitialiser l'ordre</button>
+              )}
             </div>
             {/* Barre de recherche */}
             {applications.length > 0 && (
@@ -581,10 +682,17 @@ export default function HomePage() {
 
           {applications.length > 0 ? (() => {
             // Filtre (recherche + catégorie) puis tri : favoris d'abord, ensuite ordre d'affichage.
+            // Le glisser-déposer n'est actif que sans filtre (on réordonne la liste complète).
+            const canReorder = !search.trim() && !catFilter
             const visible = applications
               .filter((app) => app.nom.toLowerCase().includes(search.trim().toLowerCase()))
               .filter((app) => !catFilter || (app.category || "").trim() === catFilter)
               .sort((a, b) => {
+                // Ordre personnel prioritaire s'il est défini.
+                if (personalOrder.length > 0) {
+                  const ia = orderIndex(a.id), ib = orderIndex(b.id)
+                  if (ia !== ib) return ia - ib
+                }
                 const fa = favIds.includes(a.id) ? 0 : 1
                 const fb = favIds.includes(b.id) ? 0 : 1
                 if (fa !== fb) return fa - fb
@@ -601,7 +709,11 @@ export default function HomePage() {
                 return (
                   <div
                     key={app.id}
-                    className="relative bg-surface rounded-lg border border-line shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)] p-4 text-center flex flex-col hover:shadow-lg transition-all duration-200"
+                    draggable={canReorder}
+                    onDragStart={canReorder ? () => setDragId(app.id) : undefined}
+                    onDragOver={canReorder ? (e) => e.preventDefault() : undefined}
+                    onDrop={canReorder ? () => handleDropOn(app.id) : undefined}
+                    className={`relative bg-surface rounded-lg border border-line shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)] p-4 text-center flex flex-col hover:shadow-lg transition-all duration-200 ${canReorder ? "cursor-move" : ""} ${dragId === app.id ? "opacity-50 ring-2 ring-brand" : ""}`}
                   >
                     {/* Favori */}
                     <button

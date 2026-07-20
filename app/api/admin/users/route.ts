@@ -4,6 +4,7 @@ import { logUserAction, logError } from "@/lib/logger"
 import { requireAdmin, authErrorResponse, isBankAdmin } from "@/lib/auth"
 import { sanitizeAvatar } from "@/lib/user-store"
 import { grantAllBankApps } from "@/lib/access-seed"
+import { notifyMany } from "@/lib/notifications-store"
 import { promises as fs } from "fs"
 import path from "path"
 import { prisma } from "@/lib/prisma"
@@ -162,6 +163,16 @@ export async function POST(request: NextRequest) {
       // Accès par défaut : toutes les applications de la banque pour un admin de banque.
       if (isNewBankAdmin) {
         await grantAllBankApps(newId, finalBanqueId as number)
+      }
+      // Notifie les admins de la banque qu'un utilisateur a été créé (hors créateur).
+      if (finalBanqueId != null) {
+        const bankAdmins = users
+          .filter((u) => u.role === "admin" && u.banque_id === finalBanqueId && u.actif !== false && u.id !== me.id && u.id !== newId)
+          .map((u) => u.id)
+        await notifyMany(bankAdmins, {
+          type: "bank_user_created",
+          message: `Un nouvel utilisateur (${newUser.nom}) a été créé dans votre banque.`,
+        })
       }
       const { mot_de_passe, ...safe } = newUser
       responseUser = safe

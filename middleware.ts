@@ -6,7 +6,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const session = request.cookies.get(SESSION_COOKIE_NAME)
 
-  const protectedRoutes = ["/profile", "/admin"]
+  const protectedRoutes = ["/profile", "/admin", "/my-activity"]
   const adminRoutes = ["/admin"]
 
   const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))

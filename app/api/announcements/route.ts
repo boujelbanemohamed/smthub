@@ -4,6 +4,9 @@ import { listAnnouncements, addAnnouncement, updateAnnouncement, deleteAnnouncem
 import { listGroups } from "@/lib/groups-store"
 import { getDismissedIdsForUser } from "@/lib/announcement-dismissals-store"
 import { logAction } from "@/lib/logger"
+import { notifyMany } from "@/lib/notifications-store"
+import { promises as fs } from "fs"
+import path from "path"
 
 // GET → annonces. Utilisateur standard : uniquement les annonces actives.
 // Admin (?all=1) : toutes les annonces pour l'administration.
@@ -74,6 +77,25 @@ export async function POST(request: NextRequest) {
       dismissible !== false
     )
     await logAction("Création annonce", `Annonce publiée: ${message.trim().slice(0, 80)}`, "INFO", admin.id, admin.nom)
+
+    // Notification in-app aux destinataires de l'annonce.
+    try {
+      let targetIds: number[] = []
+      if (aud === "users") {
+        targetIds = Array.isArray(user_ids) ? user_ids.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n)) : []
+      } else if (aud === "group") {
+        const groups = await listGroups()
+        targetIds = groups.find((g) => g.id === group_id)?.member_ids || []
+      } else {
+        // "all" → tous les utilisateurs
+        try {
+          const users = JSON.parse(await fs.readFile(path.join(process.cwd(), "data", "users.json"), "utf-8"))
+          targetIds = users.filter((u: any) => u.actif !== false).map((u: any) => u.id)
+        } catch { targetIds = [] }
+      }
+      await notifyMany(targetIds, { type: "announcement", message: `Nouvelle annonce : ${message.trim().slice(0, 90)}`, link: null })
+    } catch { /* silencieux */ }
+
     return NextResponse.json(item, { status: 201 })
   } catch (error) {
     return authErrorResponse(error) || NextResponse.json({ error: "Erreur serveur" }, { status: 500 })

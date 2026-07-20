@@ -4,6 +4,7 @@ import { promises as fs } from "fs"
 import path from "path"
 import { logApplicationAction, logError } from "@/lib/logger"
 import { deleteAllForApp } from "@/lib/app-code-store"
+import { notifyMany } from "@/lib/notifications-store"
 
 const DATA_FILE = path.join(process.cwd(), "data", "applications.json")
 
@@ -65,6 +66,7 @@ export async function PUT(
       updatedApp.status = appData.status === "maintenance" ? "maintenance" : "available"
     }
     const index = applications.findIndex(a => a.id === appId)
+    const oldStatus = (app as any).status === "maintenance" ? "maintenance" : "available"
     applications[index] = updatedApp
     await writeApplications(applications)
     await logApplicationAction(
@@ -75,6 +77,21 @@ export async function PUT(
       admin.nom,
       `Application mise à jour: ${updatedApp.nom}`
     )
+    // Changement de statut → notifie les utilisateurs ayant accès à l'appli.
+    if (appData.status !== undefined && updatedApp.status !== oldStatus) {
+      try {
+        const accessRaw = await fs.readFile(path.join(process.cwd(), "data", "user_access.json"), "utf-8")
+        const access = JSON.parse(accessRaw)
+        const userIds = access.filter((a: any) => a.application_id === appId).map((a: any) => a.utilisateur_id)
+        await notifyMany(userIds, {
+          type: "maintenance",
+          message: updatedApp.status === "maintenance"
+            ? `« ${updatedApp.nom} » est passée en maintenance.`
+            : `« ${updatedApp.nom} » est de nouveau disponible.`,
+          link: updatedApp.status === "maintenance" ? null : updatedApp.app_url || null,
+        })
+      } catch { /* silencieux */ }
+    }
     return NextResponse.json(applications[index])
   } catch (error) {
     await logError("Mise à jour application", "Erreur lors de la mise à jour d'une application", error instanceof Error ? error.message : "Erreur inconnue")

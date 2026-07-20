@@ -4,6 +4,7 @@ import { logUserAction, logError } from "@/lib/logger"
 import { requireAdmin, isBankAdmin } from "@/lib/auth"
 import { sanitizeAvatar } from "@/lib/user-store"
 import { grantAllBankApps } from "@/lib/access-seed"
+import { notify } from "@/lib/notifications-store"
 import { promises as fs } from "fs"
 import path from "path"
 
@@ -132,6 +133,10 @@ export async function PUT(
       oldUser.nom,
       `Utilisateur modifié: ${oldUser.nom} (${oldUser.email}). Changements: ${changes.join(", ")}`
     )
+    // Notifie l'utilisateur concerné qu'un admin a modifié son profil.
+    if (changes.length > 0 && me.id !== userId) {
+      await notify(userId, { type: "profile_updated", message: "Votre profil a été mis à jour par un administrateur." })
+    }
 
     // Retourner l'utilisateur sans le mot de passe
     const { mot_de_passe, ...userResponse } = users[userIndex]

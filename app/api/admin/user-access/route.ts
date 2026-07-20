@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { requireAdmin, isBankAdmin } from "@/lib/auth"
 import { getBank, bankUserIds } from "@/lib/banks-store"
 import { logAccessAction, logError } from "@/lib/logger"
+import { notify } from "@/lib/notifications-store"
 import { promises as fs } from "fs"
 import path from "path"
 
@@ -117,6 +118,11 @@ export async function POST(request: NextRequest) {
       app?.nom || `Application ${application_id}`,
       `Accès accordé: ${user?.nom || `Utilisateur ${utilisateur_id}`} → ${app?.nom || `Application ${application_id}`}`
     )
+    await notify(Number(utilisateur_id), {
+      type: "access_granted",
+      message: `L'accès à « ${app?.nom || "une application"} » vous a été accordé.`,
+      link: app?.app_url || null,
+    })
 
     return NextResponse.json(newAccess, { status: 201 })
   } catch (error) {
@@ -173,6 +179,10 @@ export async function DELETE(request: NextRequest) {
       app?.nom || `Application ${application_id}`,
       `Accès révoqué: ${user?.nom || `Utilisateur ${utilisateur_id}`} → ${app?.nom || `Application ${application_id}`}`
     )
+    await notify(Number(utilisateur_id), {
+      type: "access_revoked",
+      message: `Votre accès à « ${app?.nom || "une application"} » a été retiré.`,
+    })
 
     return NextResponse.json({ message: "Accès révoqué" })
   } catch (error) {
