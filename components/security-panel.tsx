@@ -22,11 +22,18 @@ interface SecurityConfig {
 // Panneau « Sécurité ». Configuration réservée au super-admin ; la section de
 // déverrouillage des comptes est aussi accessible aux admins de banque (pour
 // les comptes de leur banque).
+type ModalKind = "success" | "info" | "error"
+
 export function SecurityPanel({ isSuper }: { isSuper: boolean }) {
   const [config, setConfig] = useState<SecurityConfig | null>(null)
+  // Instantané de la dernière configuration enregistrée : sert à détecter
+  // l'absence de modification lors du clic sur « Enregistrer ».
+  const [savedSnapshot, setSavedSnapshot] = useState<string>("")
   const [locked, setLocked] = useState<{ email: string; minutesLeft: number }[]>([])
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null)
+  // Pop-up (modal) de résultat d'enregistrement.
+  const [modal, setModal] = useState<{ kind: ModalKind; msg: string } | null>(null)
 
   const showToast = (ok: boolean, msg: string) => {
     setToast({ ok, msg })
@@ -37,7 +44,11 @@ export function SecurityPanel({ isSuper }: { isSuper: boolean }) {
     if (!isSuper) return
     try {
       const r = await fetch("/api/admin/security")
-      if (r.ok) setConfig((await r.json()).config)
+      if (r.ok) {
+        const cfg = (await r.json()).config
+        setConfig(cfg)
+        setSavedSnapshot(JSON.stringify(cfg))
+      }
     } catch { /* silencieux */ }
   }
   const loadLocks = async () => {
@@ -55,6 +66,11 @@ export function SecurityPanel({ isSuper }: { isSuper: boolean }) {
 
   const save = async () => {
     if (!config) return
+    // Aucune modification depuis le dernier enregistrement → pop-up d'information.
+    if (JSON.stringify(config) === savedSnapshot) {
+      setModal({ kind: "info", msg: "Aucune modification à enregistrer." })
+      return
+    }
     setSaving(true)
     try {
       const r = await fetch("/api/admin/security", {
@@ -62,15 +78,16 @@ export function SecurityPanel({ isSuper }: { isSuper: boolean }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
       })
-      const d = await r.json()
+      const d = await r.json().catch(() => ({}))
       if (r.ok) {
         setConfig(d.config)
-        showToast(true, "Configuration de sécurité enregistrée.")
+        setSavedSnapshot(JSON.stringify(d.config))
+        setModal({ kind: "success", msg: "Les paramètres de sécurité ont bien été enregistrés." })
       } else {
-        showToast(false, d.error || "Échec de l'enregistrement.")
+        setModal({ kind: "error", msg: d.error || "Échec de l'enregistrement des paramètres." })
       }
     } catch {
-      showToast(false, "Erreur réseau.")
+      setModal({ kind: "error", msg: "Erreur réseau : les paramètres n'ont pas pu être enregistrés." })
     } finally {
       setSaving(false)
     }
@@ -108,6 +125,35 @@ export function SecurityPanel({ isSuper }: { isSuper: boolean }) {
 
   return (
     <div className="space-y-6">
+      {/* Pop-up de résultat d'enregistrement */}
+      {modal && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setModal(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl bg-surface border border-line shadow-2xl p-6 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center mb-3">
+              {modal.kind === "success" && <CheckCircle2 className="w-12 h-12 text-green-600" />}
+              {modal.kind === "info" && <AlertCircle className="w-12 h-12 text-amber-500" />}
+              {modal.kind === "error" && <AlertCircle className="w-12 h-12 text-red-600" />}
+            </div>
+            <h3 className="text-lg font-bold text-ink mb-1">
+              {modal.kind === "success" ? "Enregistré" : modal.kind === "info" ? "Aucune modification" : "Erreur"}
+            </h3>
+            <p className="text-sm text-ink-muted mb-5">{modal.msg}</p>
+            <button
+              onClick={() => setModal(null)}
+              className="px-5 py-2 rounded-lg bg-brand text-white font-medium hover:opacity-90"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
       {toast && (
         <div
           className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${
