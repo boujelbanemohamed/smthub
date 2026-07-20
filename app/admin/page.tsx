@@ -148,6 +148,18 @@ interface Application {
   status?: "available" | "maintenance"
 }
 
+// Libellé de rôle (+ banque) réutilisable par les différents panneaux
+// (annonces, groupes, banques). Renvoie un texte court et une classe de badge.
+function roleLabelFor(u: User, banks: { id: number; nom: string }[]): { label: string; className: string } {
+  const isAdmin = u.role === "admin"
+  const inBank = u.banque_id != null
+  const bn = inBank ? banks.find((b) => b.id === u.banque_id)?.nom : ""
+  if (isAdmin && !inBank) return { label: "Super administrateur", className: "bg-brand text-white" }
+  if (isAdmin && inBank) return { label: `Admin banque${bn ? " · " + bn : ""}`, className: "bg-purple-600 text-white" }
+  if (!isAdmin && inBank) return { label: `Utilisateur banque${bn ? " · " + bn : ""}`, className: "bg-blue-100 text-blue-800 border border-blue-200" }
+  return { label: "Utilisateur", className: "bg-surface-muted text-ink border border-line" }
+}
+
 interface UserAccess {
   utilisateur_id: number
   application_id: number
@@ -1449,7 +1461,7 @@ export default function AdminPage() {
           {/* Banks Tab (super-admin) */}
           {isSuper && (
             <TabsContent value="banks" className="space-y-6">
-              <BanksPanel banks={banks} setBanks={setBanks} applications={applications} />
+              <BanksPanel banks={banks} setBanks={setBanks} applications={applications} users={users} />
             </TabsContent>
           )}
 
@@ -2550,12 +2562,12 @@ export default function AdminPage() {
 
             {/* Groupes Tab */}
             <TabsContent value="groups" className="space-y-6">
-              <GroupsPanel users={users} applications={applications} onApplied={refreshUsers} />
+              <GroupsPanel users={users} applications={applications} banks={banks} onApplied={refreshUsers} />
             </TabsContent>
 
             {/* Annonces Tab */}
             <TabsContent value="announcements" className="space-y-6">
-              <AnnouncementsPanel users={users} />
+              <AnnouncementsPanel users={users} banks={banks} />
             </TabsContent>
 
             {/* Activité utilisateur Tab */}
@@ -3502,7 +3514,7 @@ function AppCodeManager({ appId, appName }: { appId: number; appName: string }) 
 
 // Panneau d'administration des banques (super-admin) : créer une banque,
 // activer/désactiver, supprimer, et attribuer des applications à chaque banque.
-function BanksPanel({ banks, setBanks, applications }: { banks: Bank[]; setBanks: (b: Bank[]) => void; applications: Application[] }) {
+function BanksPanel({ banks, setBanks, applications, users }: { banks: Bank[]; setBanks: (b: Bank[]) => void; applications: Application[]; users: User[] }) {
   const [newName, setNewName] = useState("")
   const [newLogo, setNewLogo] = useState<string | null>(null)
   const [newColor, setNewColor] = useState("")
@@ -3754,7 +3766,7 @@ function BanksPanel({ banks, setBanks, applications }: { banks: Bank[]; setBanks
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <button onClick={() => setExpanded(expanded === b.id ? null : b.id)} className="text-xs text-brand px-2 py-1 border border-line rounded-md hover:bg-app">
-                      Applications
+                      Détails
                     </button>
                     <input type="color" value={b.theme_color || "#1877f2"} onChange={(e) => setBankColor(b, e.target.value)}
                       className="h-7 w-8 rounded border border-line bg-surface cursor-pointer p-0" title="Couleur d'accent" />
@@ -3787,6 +3799,29 @@ function BanksPanel({ banks, setBanks, applications }: { banks: Bank[]; setBanks
                         ))}
                       </div>
                     )}
+
+                    {/* Utilisateurs rattachés à cette banque, avec leur rôle */}
+                    <p className="text-xs text-ink-muted mt-4 mb-2">Utilisateurs de cette banque :</p>
+                    {(() => {
+                      const bankUsers = users.filter((u) => Number(u.banque_id) === Number(b.id))
+                      if (bankUsers.length === 0) return <p className="text-xs text-ink-faint">Aucun utilisateur rattaché à cette banque.</p>
+                      return (
+                        <div className="space-y-1">
+                          {bankUsers.map((u) => {
+                            const rl = roleLabelFor(u, banks)
+                            return (
+                              <div key={u.id} className="flex items-center gap-2 text-sm">
+                                <span className="text-ink">{u.nom}</span>
+                                <span className="text-ink-faint">({u.email})</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${rl.className}`}>{rl.label}</span>
+                                {u.actif === false && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">désactivé</span>}
+                              </div>
+                            )
+                          })}
+                          <p className="text-xs text-ink-faint mt-1">{bankUsers.length} utilisateur(s).</p>
+                        </div>
+                      )
+                    })()}
                   </div>
                 ) : null}
               </li>
@@ -4464,7 +4499,7 @@ function TemplateEditForm({ template, onSubmit }: { template: any, onSubmit: (up
 // ---------------------------------------------------------------------------
 // Panneau : Annonces (bannières publiées aux utilisateurs)
 // ---------------------------------------------------------------------------
-interface AnnItem { id: string; message: string; level: "info" | "warning" | "success"; active: boolean; created_at: string; created_by: string; start_date?: string | null; end_date?: string | null; audience?: "all" | "group" | "users"; group_id?: string | null; user_ids?: number[]; dismissible?: boolean }
+interface AnnItem { id: string; message: string; level: "info" | "warning" | "success"; active: boolean; created_at: string; created_by: string; start_date?: string | null; end_date?: string | null; audience?: "all" | "bank" | "group" | "users"; group_id?: string | null; bank_id?: number | null; user_ids?: number[]; dismissible?: boolean }
 
 // Statut d'affichage d'une annonce programmée (côté admin)
 function annStatus(a: AnnItem): { label: string; cls: string } {
@@ -4481,7 +4516,7 @@ function fmtDate(iso?: string | null): string {
   try { return new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) } catch { return "" }
 }
 
-function AnnouncementsPanel({ users }: { users: User[] }) {
+function AnnouncementsPanel({ users, banks }: { users: User[]; banks: Bank[] }) {
   const [items, setItems] = useState<AnnItem[]>([])
   const [message, setMessage] = useState("")
   const [level, setLevel] = useState<"info" | "warning" | "success">("info")
@@ -4491,17 +4526,21 @@ function AnnouncementsPanel({ users }: { users: User[] }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   // Ciblage
-  const [audience, setAudience] = useState<"all" | "group" | "users">("all")
+  const [audience, setAudience] = useState<"all" | "bank" | "group" | "users">("all")
   const [groupId, setGroupId] = useState("")
+  const [bankTarget, setBankTarget] = useState<string>("")
   const [targetUsers, setTargetUsers] = useState<number[]>([])
+  const [userBankFilter, setUserBankFilter] = useState<string>("") // filtre banque du sélecteur d'utilisateurs
   const [groups, setGroups] = useState<{ id: string; nom: string; member_ids: number[] }[]>([])
   const [dismissible, setDismissible] = useState(true)
   const [editId, setEditId] = useState<string | null>(null)
-  const standardUsers = users.filter((u) => u.role !== "admin")
+  // On peut cibler tout utilisateur non super-admin (utilisateurs et admins de banque).
+  const selectableUsers = users.filter((u) => !(u.role === "admin" && u.banque_id == null))
+  const bankNameOf = (id?: number | null) => (id != null ? banks.find((b) => b.id === id)?.nom : "")
 
   const resetForm = () => {
     setEditId(null); setMessage(""); setLevel("info"); setMode("permanent")
-    setStartDate(""); setEndDate(""); setAudience("all"); setGroupId(""); setTargetUsers([]); setDismissible(true); setError("")
+    setStartDate(""); setEndDate(""); setAudience("all"); setGroupId(""); setBankTarget(""); setUserBankFilter(""); setTargetUsers([]); setDismissible(true); setError("")
   }
 
   // Charge une annonce existante dans le formulaire pour la modifier
@@ -4519,6 +4558,7 @@ function AnnouncementsPanel({ users }: { users: User[] }) {
     setEndDate(toLocal(a.end_date))
     setAudience(a.audience || "all")
     setGroupId(a.group_id || "")
+    setBankTarget(a.bank_id != null ? String(a.bank_id) : "")
     setTargetUsers(a.user_ids || [])
     setDismissible(a.dismissible !== false)
     setError("")
@@ -4543,6 +4583,7 @@ function AnnouncementsPanel({ users }: { users: User[] }) {
       return
     }
     if (audience === "group" && !groupId) { setError("Veuillez choisir un groupe."); return }
+    if (audience === "bank" && !bankTarget) { setError("Veuillez choisir une banque."); return }
     if (audience === "users" && targetUsers.length === 0) { setError("Veuillez choisir au moins un utilisateur."); return }
     setLoading(true)
     try {
@@ -4557,6 +4598,7 @@ function AnnouncementsPanel({ users }: { users: User[] }) {
         body.end_date = null
       }
       if (audience === "group") body.group_id = groupId
+      if (audience === "bank") body.bank_id = Number(bankTarget)
       if (audience === "users") body.user_ids = targetUsers
       const res = editId
         ? await fetch("/api/announcements", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, id: editId }) })
@@ -4604,6 +4646,7 @@ function AnnouncementsPanel({ users }: { users: User[] }) {
             </select>
             <select value={audience} onChange={(e) => setAudience(e.target.value as any)} className="border border-line rounded-md bg-surface text-ink px-3 h-10">
               <option value="all">Tout le monde</option>
+              <option value="bank">Une banque</option>
               <option value="group">Un groupe</option>
               <option value="users">Des utilisateurs</option>
             </select>
@@ -4613,20 +4656,48 @@ function AnnouncementsPanel({ users }: { users: User[] }) {
                 {groups.map((g) => <option key={g.id} value={g.id}>{g.nom} ({g.member_ids.length})</option>)}
               </select>
             )}
+            {audience === "bank" && (
+              <select value={bankTarget} onChange={(e) => setBankTarget(e.target.value)} className="border border-line rounded-md bg-surface text-ink px-3 h-10">
+                <option value="">— choisir une banque —</option>
+                {banks.map((b) => <option key={b.id} value={String(b.id)}>{b.nom}</option>)}
+              </select>
+            )}
           </div>
 
           {audience === "users" && (
             <div>
-              <p className="text-sm text-ink-muted mb-1">Destinataires :</p>
-              <div className="space-y-1 max-h-40 overflow-auto border border-line rounded-md p-2">
-                {standardUsers.map((u) => (
-                  <label key={u.id} className="flex items-center gap-2 text-sm text-ink cursor-pointer py-1">
-                    <input type="checkbox" checked={targetUsers.includes(u.id)}
-                      onChange={() => setTargetUsers((prev) => prev.includes(u.id) ? prev.filter((x) => x !== u.id) : [...prev, u.id])} />
-                    {u.nom} <span className="text-ink-faint">({u.email})</span>
-                  </label>
-                ))}
+              <div className="flex items-center justify-between mb-1 gap-2">
+                <p className="text-sm text-ink-muted">Destinataires :</p>
+                {/* Filtre par banque pour cibler des utilisateurs d'une banque précise */}
+                <select value={userBankFilter} onChange={(e) => setUserBankFilter(e.target.value)} className="border border-line rounded-md bg-surface text-ink px-2 h-8 text-sm">
+                  <option value="">Toutes les banques</option>
+                  <option value="none">Sans banque</option>
+                  {banks.map((b) => <option key={b.id} value={String(b.id)}>{b.nom}</option>)}
+                </select>
               </div>
+              <div className="space-y-1 max-h-56 overflow-auto border border-line rounded-md p-2">
+                {selectableUsers
+                  .filter((u) => {
+                    if (!userBankFilter) return true
+                    if (userBankFilter === "none") return u.banque_id == null
+                    return Number(u.banque_id) === Number(userBankFilter)
+                  })
+                  .map((u) => {
+                    const rl = roleLabelFor(u, banks)
+                    return (
+                      <label key={u.id} className="flex items-center gap-2 text-sm text-ink cursor-pointer py-1">
+                        <input type="checkbox" checked={targetUsers.includes(u.id)}
+                          onChange={() => setTargetUsers((prev) => prev.includes(u.id) ? prev.filter((x) => x !== u.id) : [...prev, u.id])} />
+                        <span className="flex-1">{u.nom} <span className="text-ink-faint">({u.email})</span></span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${rl.className}`}>{rl.label}</span>
+                      </label>
+                    )
+                  })}
+                {selectableUsers.filter((u) => !userBankFilter || (userBankFilter === "none" ? u.banque_id == null : Number(u.banque_id) === Number(userBankFilter))).length === 0 && (
+                  <p className="text-xs text-ink-muted py-1">Aucun utilisateur pour ce filtre.</p>
+                )}
+              </div>
+              {targetUsers.length > 0 && <p className="text-xs text-ink-faint mt-1">{targetUsers.length} destinataire(s) sélectionné(s).</p>}
             </div>
           )}
 
@@ -4671,9 +4742,11 @@ function AnnouncementsPanel({ users }: { users: User[] }) {
             const aud = a.audience || "all"
             const audLabel = aud === "all"
               ? "Tout le monde"
-              : aud === "group"
-                ? `Groupe : ${groups.find((g) => g.id === a.group_id)?.nom || "?"}`
-                : `${(a.user_ids || []).length} utilisateur(s)`
+              : aud === "bank"
+                ? `Banque : ${bankNameOf(a.bank_id) || "?"}`
+                : aud === "group"
+                  ? `Groupe : ${groups.find((g) => g.id === a.group_id)?.nom || "?"}`
+                  : `${(a.user_ids || []).length} utilisateur(s)`
             return (
             <div key={a.id} className="flex items-center gap-3 border border-line rounded-md p-3">
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badgeColor[a.level]}`}>{a.level}</span>
@@ -5248,8 +5321,13 @@ function StatsPanel({ applications, users, banks = [], isSuper = false }: { appl
 // ---------------------------------------------------------------------------
 interface Grp { id: string; nom: string; member_ids: number[]; created_at: string }
 
-function GroupsPanel({ users, applications, onApplied }: { users: User[]; applications: Application[]; onApplied: () => void }) {
-  const standardUsers = users.filter((u) => u.role !== "admin")
+function GroupsPanel({ users, applications, banks, onApplied }: { users: User[]; applications: Application[]; banks: Bank[]; onApplied: () => void }) {
+  // Tous les utilisateurs sélectionnables, quels que soient leurs rôles
+  // (le super-admin voit tout le monde ; l'admin de banque, sa banque via le
+  // périmètre serveur). On exclut seulement le super-admin lui-même n'a pas de
+  // sens ici → on garde tous les comptes.
+  const groupUsers = users
+  const roleTag = (u: User) => roleLabelFor(u, banks)
   const toggle = (arr: number[], set: (v: number[]) => void, id: number) =>
     set(arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id])
 
@@ -5349,13 +5427,17 @@ function GroupsPanel({ users, applications, onApplied }: { users: User[]; applic
             <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nom du groupe (ex. Équipe RH)" className="bg-surface border-line text-ink" />
             <div>
               <p className="text-sm text-ink-muted mb-1">Membres :</p>
-              <div className="space-y-1 max-h-40 overflow-auto border border-line rounded-md p-2">
-                {standardUsers.map((u) => (
+              <div className="space-y-1 max-h-56 overflow-auto border border-line rounded-md p-2">
+                {groupUsers.map((u) => {
+                  const rl = roleTag(u)
+                  return (
                   <label key={u.id} className="flex items-center gap-2 text-sm text-ink cursor-pointer py-1">
                     <input type="checkbox" checked={newMembers.includes(u.id)} onChange={() => toggle(newMembers, setNewMembers, u.id)} />
-                    {u.nom} <span className="text-ink-faint">({u.email})</span>
+                    <span className="flex-1">{u.nom} <span className="text-ink-faint">({u.email})</span></span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${rl.className}`}>{rl.label}</span>
                   </label>
-                ))}
+                  )
+                })}
               </div>
             </div>
             <Button onClick={createGroup} disabled={!newName.trim()} className="bg-brand hover:bg-brand-hover text-white gap-2">
@@ -5419,13 +5501,17 @@ function GroupsPanel({ users, applications, onApplied }: { users: User[]; applic
                       <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="bg-surface border-line text-ink" />
                     </div>
                     <p className="text-sm text-ink-muted">Membres :</p>
-                    <div className="space-y-1 max-h-40 overflow-auto border border-line rounded-md p-2">
-                      {standardUsers.map((u) => (
+                    <div className="space-y-1 max-h-56 overflow-auto border border-line rounded-md p-2">
+                      {groupUsers.map((u) => {
+                        const rl = roleTag(u)
+                        return (
                         <label key={u.id} className="flex items-center gap-2 text-sm text-ink cursor-pointer py-1">
                           <input type="checkbox" checked={editMembers.includes(u.id)} onChange={() => toggle(editMembers, setEditMembers, u.id)} />
-                          {u.nom} <span className="text-ink-faint">({u.email})</span>
+                          <span className="flex-1">{u.nom} <span className="text-ink-faint">({u.email})</span></span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${rl.className}`}>{rl.label}</span>
                         </label>
-                      ))}
+                        )
+                      })}
                     </div>
                     <Button size="sm" disabled={!editName.trim()} onClick={() => saveGroup(g.id)} className="bg-brand hover:bg-brand-hover text-white">Enregistrer</Button>
                   </div>
@@ -5476,12 +5562,16 @@ function GroupsPanel({ users, applications, onApplied }: { users: User[]; applic
                 </div>
               ) : (
                 <div className="space-y-1 max-h-64 overflow-auto border border-line rounded-md p-2">
-                  {standardUsers.map((u) => (
+                  {groupUsers.map((u) => {
+                    const rl = roleTag(u)
+                    return (
                     <label key={u.id} className="flex items-center gap-2 text-sm text-ink cursor-pointer py-1">
                       <input type="checkbox" checked={selUsers.includes(u.id)} onChange={() => toggle(selUsers, setSelUsers, u.id)} />
-                      {u.nom} <span className="text-ink-faint">({u.email})</span>
+                      <span className="flex-1">{u.nom} <span className="text-ink-faint">({u.email})</span></span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${rl.className}`}>{rl.label}</span>
                     </label>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>

@@ -12,9 +12,11 @@ export interface Announcement {
   // Sinon l'annonce n'est visible qu'entre ces deux dates (ISO 8601).
   start_date?: string | null
   end_date?: string | null
-  // Ciblage de l'audience : tout le monde, un groupe, ou des utilisateurs précis.
-  audience?: "all" | "group" | "users"
+  // Ciblage de l'audience : tout le monde, une banque, un groupe, ou des
+  // utilisateurs précis.
+  audience?: "all" | "bank" | "group" | "users"
   group_id?: string | null
+  bank_id?: number | null
   user_ids?: number[]
   // L'utilisateur peut-il fermer l'annonce ? (true par défaut). Si false,
   // la bannière reste affichée sans croix de fermeture.
@@ -35,11 +37,17 @@ export function isAnnouncementVisible(a: Announcement, now: Date = new Date()): 
 //  - "all" (ou audience absente) → tout le monde
 //  - "users" → l'utilisateur doit figurer dans user_ids
 //  - "group" → l'utilisateur doit être membre du groupe (memberIds fourni par l'appelant)
-export function isAnnouncementForUser(a: Announcement, userId: number, groupMemberIds: number[] = []): boolean {
+export function isAnnouncementForUser(
+  a: Announcement,
+  userId: number,
+  groupMemberIds: number[] = [],
+  userBankId: number | null = null
+): boolean {
   const aud = a.audience || "all"
   if (aud === "all") return true
   if (aud === "users") return Array.isArray(a.user_ids) && a.user_ids.includes(userId)
   if (aud === "group") return groupMemberIds.includes(userId)
+  if (aud === "bank") return a.bank_id != null && userBankId != null && Number(a.bank_id) === Number(userBankId)
   return true
 }
 
@@ -67,7 +75,8 @@ export async function addAnnouncement(
   audience: Announcement["audience"] = "all",
   groupId?: string | null,
   userIds?: number[],
-  dismissible: boolean = true
+  dismissible: boolean = true,
+  bankId?: number | null
 ): Promise<Announcement> {
   const items = await listAnnouncements()
   const item: Announcement = {
@@ -81,6 +90,7 @@ export async function addAnnouncement(
     end_date: endDate || null,
     audience: audience || "all",
     group_id: audience === "group" ? (groupId || null) : null,
+    bank_id: audience === "bank" ? (bankId != null ? Number(bankId) : null) : null,
     user_ids: audience === "users" ? (Array.isArray(userIds) ? userIds : []) : [],
     dismissible,
   }
@@ -102,7 +112,7 @@ export async function deleteAnnouncement(id: string): Promise<boolean> {
 // restent inchangés.
 export async function updateAnnouncement(
   id: string,
-  fields: Partial<Pick<Announcement, "message" | "level" | "start_date" | "end_date" | "audience" | "group_id" | "user_ids" | "dismissible">>
+  fields: Partial<Pick<Announcement, "message" | "level" | "start_date" | "end_date" | "audience" | "group_id" | "bank_id" | "user_ids" | "dismissible">>
 ): Promise<Announcement | null> {
   const items = await listAnnouncements()
   const item = items.find((a) => a.id === id)
@@ -110,9 +120,10 @@ export async function updateAnnouncement(
 
   if (typeof fields.message === "string" && fields.message.trim()) item.message = fields.message.trim()
   if (fields.level && ["info", "warning", "success"].includes(fields.level)) item.level = fields.level
-  if (fields.audience && ["all", "group", "users"].includes(fields.audience)) {
+  if (fields.audience && ["all", "bank", "group", "users"].includes(fields.audience)) {
     item.audience = fields.audience
     item.group_id = fields.audience === "group" ? (fields.group_id || null) : null
+    item.bank_id = fields.audience === "bank" ? (fields.bank_id != null ? Number(fields.bank_id) : null) : null
     item.user_ids = fields.audience === "users" ? (Array.isArray(fields.user_ids) ? fields.user_ids : []) : []
   }
   if (fields.start_date !== undefined) item.start_date = fields.start_date || null

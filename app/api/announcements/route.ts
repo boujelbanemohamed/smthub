@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
       announcements: items.filter(
         (a) =>
           isAnnouncementVisible(a) &&
-          isAnnouncementForUser(a, user.id, groupMembers(a.group_id)) &&
+          isAnnouncementForUser(a, user.id, groupMembers(a.group_id), user.banque_id ?? null) &&
           // Annonce fermable déjà fermée par cet utilisateur → on ne la réaffiche plus.
           !(a.dismissible !== false && dismissed.has(a.id))
       ),
@@ -44,14 +44,17 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const admin = await requireSuperAdmin()
-    const { message, level, start_date, end_date, audience, group_id, user_ids, dismissible } = await request.json()
+    const { message, level, start_date, end_date, audience, group_id, bank_id, user_ids, dismissible } = await request.json()
     if (typeof message !== "string" || !message.trim()) {
       return NextResponse.json({ error: "Message requis" }, { status: 400 })
     }
     const lvl = ["info", "warning", "success"].includes(level) ? level : "info"
-    const aud = ["all", "group", "users"].includes(audience) ? audience : "all"
+    const aud = ["all", "bank", "group", "users"].includes(audience) ? audience : "all"
     if (aud === "group" && !group_id) {
       return NextResponse.json({ error: "Veuillez choisir un groupe" }, { status: 400 })
+    }
+    if (aud === "bank" && (bank_id == null || Number.isNaN(Number(bank_id)))) {
+      return NextResponse.json({ error: "Veuillez choisir une banque" }, { status: 400 })
     }
     if (aud === "users" && (!Array.isArray(user_ids) || user_ids.length === 0)) {
       return NextResponse.json({ error: "Veuillez choisir au moins un utilisateur" }, { status: 400 })
@@ -74,7 +77,8 @@ export async function POST(request: NextRequest) {
       aud,
       group_id,
       Array.isArray(user_ids) ? user_ids.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n)) : [],
-      dismissible !== false
+      dismissible !== false,
+      aud === "bank" ? Number(bank_id) : null
     )
     await logAction("Création annonce", `Annonce publiée: ${message.trim().slice(0, 80)}`, "INFO", admin.id, admin.nom)
 
@@ -86,6 +90,14 @@ export async function POST(request: NextRequest) {
       } else if (aud === "group") {
         const groups = await listGroups()
         targetIds = groups.find((g) => g.id === group_id)?.member_ids || []
+      } else if (aud === "bank") {
+        // "bank" → tous les utilisateurs actifs de la banque ciblée
+        try {
+          const users = JSON.parse(await fs.readFile(path.join(process.cwd(), "data", "users.json"), "utf-8"))
+          targetIds = users
+            .filter((u: any) => u.actif !== false && Number(u.banque_id) === Number(bank_id))
+            .map((u: any) => u.id)
+        } catch { targetIds = [] }
       } else {
         // "all" → tous les utilisateurs
         try {
@@ -120,16 +132,19 @@ export async function PATCH(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const admin = await requireSuperAdmin()
-    const { id, message, level, start_date, end_date, audience, group_id, user_ids, dismissible } = await request.json()
+    const { id, message, level, start_date, end_date, audience, group_id, bank_id, user_ids, dismissible } = await request.json()
     if (typeof id !== "string" || !id) {
       return NextResponse.json({ error: "id requis" }, { status: 400 })
     }
     if (typeof message !== "string" || !message.trim()) {
       return NextResponse.json({ error: "Message requis" }, { status: 400 })
     }
-    const aud = ["all", "group", "users"].includes(audience) ? audience : "all"
+    const aud = ["all", "bank", "group", "users"].includes(audience) ? audience : "all"
     if (aud === "group" && !group_id) {
       return NextResponse.json({ error: "Veuillez choisir un groupe" }, { status: 400 })
+    }
+    if (aud === "bank" && (bank_id == null || Number.isNaN(Number(bank_id)))) {
+      return NextResponse.json({ error: "Veuillez choisir une banque" }, { status: 400 })
     }
     if (aud === "users" && (!Array.isArray(user_ids) || user_ids.length === 0)) {
       return NextResponse.json({ error: "Veuillez choisir au moins un utilisateur" }, { status: 400 })
@@ -149,6 +164,7 @@ export async function PUT(request: NextRequest) {
       end_date: end ? end.toISOString() : null,
       audience: aud,
       group_id,
+      bank_id: aud === "bank" ? Number(bank_id) : null,
       user_ids: Array.isArray(user_ids) ? user_ids.map((x: any) => Number(x)).filter((n: number) => !Number.isNaN(n)) : [],
       dismissible: dismissible !== false,
     })
