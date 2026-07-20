@@ -12,6 +12,9 @@ import { getSecurityConfig, evaluatePassword } from "@/lib/security-config"
 import { getLockState, recordFailure, clearFailures } from "@/lib/login-attempts"
 import { ensureChangedAt, ensureGrace } from "@/lib/password-security"
 import { setUserActive } from "@/lib/user-store"
+import { getUser2FA, resolveMethod, isTotpEnrolled, setEmailOtp } from "@/lib/two-factor-store"
+import { signPending } from "@/lib/twofa-token"
+import { sendEmail } from "@/lib/email-service"
 
 const USERS_FILE = path.join(process.cwd(), "data", "users.json")
 
@@ -169,6 +172,44 @@ export async function POST(request: NextRequest) {
         // Sinon on laisse entrer, mais on signale l'obligation de changement.
         passwordWarning = { mustChange: true, graceUntil, reasons }
       }
+    }
+
+    // --- Double authentification (2FA) ---
+    // Si une méthode est effective pour ce compte, on n'ouvre PAS encore la
+    // session : on renvoie un défi 2FA et un jeton temporaire. La session ne
+    // sera créée qu'après validation du code (via /api/auth/2fa/verify).
+    const my2fa = await getUser2FA(user.id)
+    const method = resolveMethod(security.twoFactor, my2fa.override)
+    if (method !== "none") {
+      if (method === "totp") {
+        const enrolled = await isTotpEnrolled(user.id)
+        const stage = enrolled ? "totp" : "enroll_totp"
+        const pending = await signPending({ uid: user.id, method: "totp", stage })
+        return NextResponse.json({
+          twoFactor: { required: true, method: "totp", stage, needsEnrollment: !enrolled },
+          pendingToken: pending,
+          passwordWarning,
+        })
+      }
+      // method === "email" → on génère et on envoie un code.
+      const code = Math.floor(100000 + Math.random() * 900000).toString()
+      await setEmailOtp(user.id, code, 10)
+      try {
+        await sendEmail({
+          to: user.email,
+          subject: "Votre code de connexion SMT HUB",
+          html: `<p>Bonjour ${user.nom},</p><p>Votre code de connexion à usage unique est :</p><p style="font-size:24px;font-weight:bold;letter-spacing:4px">${code}</p><p>Ce code expire dans 10 minutes. Si vous n'êtes pas à l'origine de cette connexion, ignorez ce message.</p>`,
+          text: `Votre code de connexion SMT HUB : ${code} (valable 10 minutes).`,
+        })
+      } catch (e) {
+        console.error("Envoi du code 2FA par email échoué:", e)
+      }
+      const pending = await signPending({ uid: user.id, method: "email", stage: "email" })
+      return NextResponse.json({
+        twoFactor: { required: true, method: "email", stage: "email" },
+        pendingToken: pending,
+        passwordWarning,
+      })
     }
 
     // Créer une session

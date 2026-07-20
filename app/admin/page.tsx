@@ -171,6 +171,26 @@ export default function AdminPage() {
   // Nom de la banque de l'admin courant (pour libeller les rôles côté admin de banque)
   const [myBankName, setMyBankName] = useState<string>("")
   const [users, setUsers] = useState<User[]>([])
+  // Réglages 2FA par utilisateur (super-admin) : { [userId]: { override, enrolled } }
+  const [twofa, setTwofa] = useState<Record<string, { override: string; enrolled: boolean }>>({})
+  const loadTwofa = async () => {
+    try {
+      const r = await fetch("/api/admin/security/user-2fa")
+      if (r.ok) setTwofa((await r.json()).overrides || {})
+    } catch { /* silencieux */ }
+  }
+  const changeTwofa = async (userId: number, override: string) => {
+    try {
+      const r = await fetch("/api/admin/security/user-2fa", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, override }),
+      })
+      if (r.ok) {
+        setTwofa((m) => ({ ...m, [userId]: { override, enrolled: override === "disabled" || override === "email" ? false : (m[userId]?.enrolled ?? false) } }))
+      }
+    } catch { /* silencieux */ }
+  }
   const [applications, setApplications] = useState<Application[]>([])
   const [userAccess, setUserAccess] = useState<UserAccess[]>([])
 
@@ -338,7 +358,8 @@ export default function AdminPage() {
         Promise.all([
           loadEmailTemplates(),
           loadLogs(),
-          loadCategories()
+          loadCategories(),
+          loadTwofa()
         ]).catch(error => {
           console.error("Erreur lors du chargement des données secondaires:", error)
         })
@@ -1467,6 +1488,25 @@ export default function AdminPage() {
                         )}
                       </div>
                       <div className="flex items-center space-x-2">
+                        {isSuper && (
+                          <div className="flex items-center gap-1.5">
+                            <Shield className="w-4 h-4 text-ink-muted" />
+                            <select
+                              value={twofa[String(user.id)]?.override || "inherit"}
+                              onChange={(e) => changeTwofa(user.id, e.target.value)}
+                              title="Type d'authentification 2FA pour cet utilisateur"
+                              className="text-xs rounded-md border border-line bg-app px-2 py-1.5 text-ink focus:outline-none focus:ring-2 focus:ring-brand/40"
+                            >
+                              <option value="inherit">2FA : par défaut</option>
+                              <option value="totp">2FA : application</option>
+                              <option value="email">2FA : email</option>
+                              <option value="disabled">2FA : désactivée</option>
+                            </select>
+                            {twofa[String(user.id)]?.enrolled && (
+                              <span title="Application d'authentification configurée" className="text-[10px] text-green-600 font-medium">✓ conf.</span>
+                            )}
+                          </div>
+                        )}
                         <Dialog open={editUserDialogOpen} onOpenChange={setEditUserDialogOpen}>
                           <DialogTrigger asChild>
                             <Button

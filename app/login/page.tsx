@@ -13,13 +13,29 @@ import Image from "next/image"
 import Link from "next/link"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Eye, EyeOff } from "lucide-react"
+import { TwoFactorStep, type TwoFAChallenge } from "@/components/two-factor-step"
 
 export default function LoginPage() {
   const [credentials, setCredentials] = useState({ email: "", password: "" })
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  // Défi 2FA en cours (après mot de passe validé) + alerte mot de passe reportée.
+  const [challenge, setChallenge] = useState<TwoFAChallenge | null>(null)
+  const [pendingPwdWarning, setPendingPwdWarning] = useState<any>(null)
   const router = useRouter()
+
+  // Redirection après connexion réussie (avec report éventuel de l'alerte mot de passe).
+  const finishLogin = (pwdWarning: any) => {
+    if (pwdWarning?.mustChange) {
+      try {
+        sessionStorage.setItem("pwdWarning", JSON.stringify(pwdWarning))
+      } catch { /* stockage indisponible */ }
+      router.push("/profile?pwd=1")
+    } else {
+      router.push("/")
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -35,16 +51,18 @@ export default function LoginPage() {
 
       if (res.ok) {
         const data = await res.json().catch(() => ({}))
-        // Mot de passe non conforme / expiré : on redirige vers le profil avec
-        // une bannière d'obligation de changement (délai de grâce affiché).
-        if (data?.passwordWarning?.mustChange) {
-          try {
-            sessionStorage.setItem("pwdWarning", JSON.stringify(data.passwordWarning))
-          } catch { /* stockage indisponible */ }
-          router.push("/profile?pwd=1")
-        } else {
-          router.push("/")
+        // Double authentification requise → on bascule sur l'écran du 2ᵉ facteur.
+        if (data?.twoFactor?.required && data?.pendingToken) {
+          setPendingPwdWarning(data.passwordWarning || null)
+          setChallenge({
+            method: data.twoFactor.method,
+            stage: data.twoFactor.stage,
+            pendingToken: data.pendingToken,
+          })
+          return
         }
+        // Sinon, connexion directe (avec éventuelle alerte mot de passe).
+        finishLogin(data?.passwordWarning)
       } else {
         const data = await res.json()
         setError(data.error || "Identifiants incorrects")
@@ -79,6 +97,18 @@ export default function LoginPage() {
 
         {/* Login Card */}
         <div className="bg-surface rounded-lg border border-line shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)] p-8">
+          {challenge ? (
+            <TwoFactorStep
+              challenge={challenge}
+              onSuccess={() => finishLogin(pendingPwdWarning)}
+              onCancel={() => {
+                setChallenge(null)
+                setPendingPwdWarning(null)
+                setCredentials((p) => ({ ...p, password: "" }))
+              }}
+            />
+          ) : (
+          <>
           <div className="text-center mb-6">
             <h2 className="text-2xl font-bold text-ink mb-2">Se connecter</h2>
             <p className="text-ink-muted">Accédez à votre portail d'applications</p>
@@ -149,6 +179,8 @@ export default function LoginPage() {
               Vous n'avez pas de compte ? Contactez votre administrateur.
             </p>
           </div>
+          </>
+          )}
         </div>
 
         {/* Additional Info */}
