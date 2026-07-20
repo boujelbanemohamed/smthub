@@ -1,5 +1,6 @@
 import { promises as fs } from "fs"
 import path from "path"
+import crypto from "crypto"
 import { prisma } from "@/lib/prisma"
 
 export interface LogEntry {
@@ -16,6 +17,40 @@ export interface LogEntry {
   status: "SUCCESS" | "FAILED" | "PENDING"
   errorMessage?: string
   metadata?: Record<string, any>
+  // Chaînage d'intégrité (inviolabilité type "blockchain légère") : chaque
+  // entrée référence le hash de la précédente. Toute modification ou
+  // suppression d'une ligne rompt la chaîne et devient détectable.
+  prevHash?: string
+  hash?: string
+}
+
+// Empreinte canonique d'une entrée (hors champs de chaînage), utilisée pour
+// calculer et vérifier le hash.
+function canonicalEntry(e: LogEntry): string {
+  return [e.id, e.timestamp, e.action, e.status, e.level, e.userId ?? "", e.userName ?? "", e.details].join("|")
+}
+
+function computeHash(prevHash: string, e: LogEntry): string {
+  return crypto.createHash("sha256").update(prevHash + "|" + canonicalEntry(e)).digest("hex")
+}
+
+// Vérifie la continuité de la chaîne de hachage sur les entrées fournies (ou
+// lues depuis le fichier). Renvoie l'indice de la première rupture (ou -1).
+export async function verifyLogChain(entries?: LogEntry[]): Promise<{ ok: boolean; brokenAt: number; total: number }> {
+  const logs = entries || (await readLogs())
+  for (let i = 0; i < logs.length; i++) {
+    const e = logs[i]
+    // Entrées anciennes sans hash (antérieures au chaînage) : ignorées.
+    if (!e.hash) continue
+    const prev = i > 0 ? logs[i - 1].hash || "" : e.prevHash || ""
+    if (i > 0 && logs[i - 1].hash && e.prevHash !== logs[i - 1].hash) {
+      return { ok: false, brokenAt: i, total: logs.length }
+    }
+    if (computeHash(prev, e) !== e.hash) {
+      return { ok: false, brokenAt: i, total: logs.length }
+    }
+  }
+  return { ok: true, brokenAt: -1, total: logs.length }
 }
 
 const LOGS_FILE = path.join(process.cwd(), "data", "admin-logs.json")
@@ -92,6 +127,10 @@ export async function logAction(
         errorMessage,
         metadata
       }
+      // Chaînage : le hash de cette entrée dépend du hash de la précédente.
+      const prevHash = logs.length ? logs[logs.length - 1].hash || "" : ""
+      logEntry.prevHash = prevHash
+      logEntry.hash = computeHash(prevHash, logEntry)
       logs.push(logEntry)
       if (logs.length > 1000) {
         logs.splice(0, logs.length - 1000)

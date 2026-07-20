@@ -54,6 +54,7 @@ import { BankHeaderInfo } from "@/components/bank-header-info"
 import { UserHeaderInfo } from "@/components/user-header-info"
 import { NotificationsBell } from "@/components/notifications-bell"
 import { SecurityPanel } from "@/components/security-panel"
+import { AuditPanel } from "@/components/audit-panel"
 
 // Composant pour l'avatar d'application avec fallback
 function AppAvatar({ app, size = 48 }: { app: Application, size?: number }) {
@@ -1420,12 +1421,28 @@ export default function AdminPage() {
                 Sécurité
               </TabsTrigger>
               )}
+              {isSuper && (
+              <TabsTrigger
+                value="audit"
+                className="data-[state=active]:bg-brand data-[state=active]:text-white text-ink font-medium"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Audit
+              </TabsTrigger>
+              )}
             </TabsList>
 
           {/* Security Tab */}
           {(isSuper || isBankAdmin) && (
             <TabsContent value="security" className="space-y-6">
               <SecurityPanel isSuper={isSuper} />
+            </TabsContent>
+          )}
+
+          {/* Audit Tab (super-admin) */}
+          {isSuper && (
+            <TabsContent value="audit" className="space-y-6">
+              <AuditPanel users={users.map((u) => ({ id: u.id, nom: u.nom }))} />
             </TabsContent>
           )}
 
