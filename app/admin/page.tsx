@@ -173,11 +173,27 @@ export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([])
   // Réglages 2FA par utilisateur (super-admin) : { [userId]: { override, enrolled } }
   const [twofa, setTwofa] = useState<Record<string, { override: string; enrolled: boolean }>>({})
+  // Politique 2FA globale (pour calculer l'état effectif par utilisateur).
+  const [globalTwoFactor, setGlobalTwoFactor] = useState<{ totpEnabled: boolean; emailEnabled: boolean }>({ totpEnabled: false, emailEnabled: false })
   const loadTwofa = async () => {
     try {
-      const r = await fetch("/api/admin/security/user-2fa")
-      if (r.ok) setTwofa((await r.json()).overrides || {})
+      const [oR, cR] = await Promise.all([
+        fetch("/api/admin/security/user-2fa"),
+        fetch("/api/admin/security"),
+      ])
+      if (oR.ok) setTwofa((await oR.json()).overrides || {})
+      if (cR.ok) setGlobalTwoFactor((await cR.json()).config?.twoFactor || { totpEnabled: false, emailEnabled: false })
     } catch { /* silencieux */ }
+  }
+  // État 2FA effectif d'un utilisateur : override utilisateur, sinon politique globale.
+  const effective2FA = (userId: number): "totp" | "email" | "none" => {
+    const ov = twofa[String(userId)]?.override || "inherit"
+    if (ov === "disabled") return "none"
+    if (ov === "totp") return "totp"
+    if (ov === "email") return "email"
+    if (globalTwoFactor.totpEnabled) return "totp"
+    if (globalTwoFactor.emailEnabled) return "email"
+    return "none"
   }
   const changeTwofa = async (userId: number, override: string) => {
     try {
@@ -1486,6 +1502,16 @@ export default function AdminPage() {
                         {user.actif === false && (
                           <Badge className="bg-red-100 text-red-700 border border-red-200">Désactivé</Badge>
                         )}
+                        {isSuper && (() => {
+                          const eff = effective2FA(user.id)
+                          return eff === "none" ? (
+                            <Badge className="bg-gray-100 text-gray-600 border border-gray-200">2FA désactivée</Badge>
+                          ) : (
+                            <Badge className="bg-green-100 text-green-700 border border-green-200">
+                              2FA active{eff === "totp" ? " · App" : " · Email"}
+                            </Badge>
+                          )
+                        })()}
                       </div>
                       <div className="flex items-center space-x-2">
                         {isSuper && (
