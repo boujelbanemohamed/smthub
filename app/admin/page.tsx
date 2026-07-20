@@ -38,6 +38,7 @@ import {
   Layers,
   Megaphone,
   BarChart3,
+  Shield,
   X,
   Home
 } from "lucide-react"
@@ -52,6 +53,7 @@ import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tool
 import { BankHeaderInfo } from "@/components/bank-header-info"
 import { UserHeaderInfo } from "@/components/user-header-info"
 import { NotificationsBell } from "@/components/notifications-bell"
+import { SecurityPanel } from "@/components/security-panel"
 
 // Composant pour l'avatar d'application avec fallback
 function AppAvatar({ app, size = 48 }: { app: Application, size?: number }) {
@@ -1372,7 +1374,23 @@ export default function AdminPage() {
                 Sauvegardes
               </TabsTrigger>
               )}
+              {(isSuper || isBankAdmin) && (
+              <TabsTrigger
+                value="security"
+                className="data-[state=active]:bg-brand data-[state=active]:text-white text-ink font-medium"
+              >
+                <Shield className="w-4 h-4 mr-2" />
+                Sécurité
+              </TabsTrigger>
+              )}
             </TabsList>
+
+          {/* Security Tab */}
+          {(isSuper || isBankAdmin) && (
+            <TabsContent value="security" className="space-y-6">
+              <SecurityPanel isSuper={isSuper} />
+            </TabsContent>
+          )}
 
           {/* Banks Tab (super-admin) */}
           {isSuper && (

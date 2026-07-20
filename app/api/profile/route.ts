@@ -6,6 +6,8 @@ import { logUserAction, logError } from "@/lib/logger"
 import { getCurrentUser as getAuthenticatedUser } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { signSession, SESSION_COOKIE_NAME, SESSION_MAX_AGE } from "@/lib/session"
+import { getSecurityConfig, evaluatePassword } from "@/lib/security-config"
+import { isPasswordReused, recordPasswordChange } from "@/lib/password-security"
 
 const USERS_FILE = path.join(process.cwd(), "data", "users.json")
 
@@ -130,6 +132,27 @@ export async function PUT(request: NextRequest) {
           { status: 400 }
         )
       }
+      // Politique de sécurité (si activée par le super-admin) : complexité +
+      // interdiction de réutilisation des N derniers mots de passe.
+      const security = await getSecurityConfig()
+      if (security.passwordPolicy.enabled) {
+        const problems = evaluatePassword(newPassword, security.passwordPolicy)
+        if (problems.length > 0) {
+          return NextResponse.json(
+            { error: `Le mot de passe doit contenir ${problems.join(", ")}.` },
+            { status: 400 }
+          )
+        }
+        if (
+          security.passwordPolicy.historyCount > 0 &&
+          (await isPasswordReused(currentUser.id, newPassword))
+        ) {
+          return NextResponse.json(
+            { error: "Ce mot de passe a déjà été utilisé récemment. Choisissez-en un autre." },
+            { status: 400 }
+          )
+        }
+      }
     }
 
     const pg = usePostgres()
@@ -155,6 +178,8 @@ export async function PUT(request: NextRequest) {
           return NextResponse.json({ error: "Mot de passe actuel incorrect" }, { status: 400 })
         }
         data.mot_de_passe = await bcrypt.hash(newPassword, 10)
+        const sec = await getSecurityConfig()
+        await recordPasswordChange(currentUser.id, data.mot_de_passe, sec.passwordPolicy.historyCount)
       }
 
       if (avatarValue !== undefined) {
@@ -208,6 +233,8 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ error: "Mot de passe actuel incorrect" }, { status: 400 })
       }
       users[userIndex].mot_de_passe = await bcrypt.hash(newPassword, 10)
+      const sec = await getSecurityConfig()
+      await recordPasswordChange(currentUser.id, users[userIndex].mot_de_passe, sec.passwordPolicy.historyCount)
     }
 
     users[userIndex].nom = nom

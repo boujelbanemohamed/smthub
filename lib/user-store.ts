@@ -71,3 +71,22 @@ export async function setUserPassword(userId: number, hashedPassword: string): P
   await writeUsers(users)
   return true
 }
+
+// Active / désactive un compte. Utilisé notamment par la désactivation
+// automatique en cas de non-conformité du mot de passe après le délai de grâce.
+export async function setUserActive(userId: number, actif: boolean): Promise<boolean> {
+  if (usePostgres()) {
+    try {
+      await prisma.user.update({ where: { id: userId }, data: { actif } })
+      return true
+    } catch (e) {
+      console.error("Prisma setUserActive, repli JSON:", e)
+    }
+  }
+  const users = await readUsers()
+  const index = users.findIndex((u) => u.id === userId)
+  if (index === -1) return false
+  ;(users[index] as any).actif = actif
+  await writeUsers(users)
+  return true
+}

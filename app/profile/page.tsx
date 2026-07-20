@@ -45,6 +45,15 @@ export default function ProfilePage() {
   const [uploading, setUploading] = useState(false)
   // Affichage/masquage des mots de passe (picto œil), par champ.
   const [showPw, setShowPw] = useState({ current: false, next: false, confirm: false })
+  // Bannière d'obligation de changement de mot de passe (politique de sécurité).
+  const [pwdWarning, setPwdWarning] = useState<{ graceUntil: string; reasons: string[] } | null>(null)
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("pwdWarning")
+      if (raw) setPwdWarning(JSON.parse(raw))
+    } catch { /* stockage indisponible */ }
+  }, [])
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   // Chargement des données utilisateur
@@ -176,6 +185,11 @@ export default function ProfilePage() {
 
       if (res.ok) {
         setSuccess("Profil mis à jour avec succès")
+        // Le mot de passe vient d'être changé → on lève la bannière d'alerte.
+        if (formData.newPassword) {
+          setPwdWarning(null)
+          try { sessionStorage.removeItem("pwdWarning") } catch { /* ignore */ }
+        }
         // Update user state
         setUser({ ...user!, nom: formData.nom, email: formData.email, avatar })
         // Clear password fields
@@ -232,6 +246,23 @@ export default function ProfilePage() {
 
       {/* Main Content */}
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Bannière politique de mot de passe */}
+        {pwdWarning && (
+          <div className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-5 py-4 text-amber-900">
+            <p className="font-semibold">Votre mot de passe ne respecte pas la politique de sécurité.</p>
+            <p className="text-sm mt-1">
+              Vous devez le changer avant le{" "}
+              <strong>
+                {new Date(pwdWarning.graceUntil).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}
+              </strong>
+              , sinon votre compte sera désactivé automatiquement.
+              {pwdWarning.reasons?.length > 0 && (
+                <> Règles non respectées : {pwdWarning.reasons.join(", ")}.</>
+              )}
+            </p>
+          </div>
+        )}
+
         {/* Welcome Section */}
         <div className="bg-surface rounded-lg border border-line shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)] p-6 mb-8">
           <div className="flex items-center space-x-4">

@@ -34,7 +34,17 @@ export default function LoginPage() {
       })
 
       if (res.ok) {
-        router.push("/")
+        const data = await res.json().catch(() => ({}))
+        // Mot de passe non conforme / expiré : on redirige vers le profil avec
+        // une bannière d'obligation de changement (délai de grâce affiché).
+        if (data?.passwordWarning?.mustChange) {
+          try {
+            sessionStorage.setItem("pwdWarning", JSON.stringify(data.passwordWarning))
+          } catch { /* stockage indisponible */ }
+          router.push("/profile?pwd=1")
+        } else {
+          router.push("/")
+        }
       } else {
         const data = await res.json()
         setError(data.error || "Identifiants incorrects")
