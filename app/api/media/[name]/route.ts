@@ -30,13 +30,21 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
   try {
     const data = await fs.readFile(path.join(UPLOAD_DIR, name))
-    return new NextResponse(data as any, {
-      status: 200,
-      headers: {
-        "Content-Type": type,
-        "Cache-Control": "public, max-age=86400",
-      },
-    })
+    const headers: Record<string, string> = {
+      "Content-Type": type,
+      "Cache-Control": "public, max-age=86400",
+      // Empêche le navigateur de « deviner » un autre type que celui déclaré.
+      "X-Content-Type-Options": "nosniff",
+    }
+    // Durcissement anti-XSS pour les SVG : un SVG piégé ne doit jamais pouvoir
+    // exécuter de script s'il est ouvert directement. On neutralise tout
+    // contenu actif via une CSP « sandbox » et on force le téléchargement en
+    // navigation directe (les balises <img> continuent de l'afficher).
+    if (ext === ".svg") {
+      headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+      headers["Content-Disposition"] = `attachment; filename="${name}"`
+    }
+    return new NextResponse(data as any, { status: 200, headers })
   } catch {
     return NextResponse.json({ error: "Introuvable" }, { status: 404 })
   }

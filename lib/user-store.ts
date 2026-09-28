@@ -59,6 +59,21 @@ export async function findUserByEmail(email: string): Promise<StoredUser | null>
   return users.find((u) => u.email === email) || null
 }
 
+// Recherche par identifiant, couvrant les deux modes (PostgreSQL puis repli
+// JSON). Utilisé par getCurrentUser pour rester correct après migration DB.
+export async function findUserById(id: number): Promise<StoredUser | null> {
+  if (usePostgres()) {
+    try {
+      const u = (await prisma.user.findUnique({ where: { id } })) as StoredUser | null
+      if (u) return u
+    } catch (e) {
+      console.error("Prisma findUserById, repli JSON:", e)
+    }
+  }
+  const users = await readUsers()
+  return users.find((u) => u.id === id) || null
+}
+
 export async function setUserPassword(userId: number, hashedPassword: string): Promise<boolean> {
   if (usePostgres()) {
     await prisma.user.update({ where: { id: userId }, data: { mot_de_passe: hashedPassword } })

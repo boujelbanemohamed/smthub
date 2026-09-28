@@ -4,7 +4,7 @@ import { promises as fs } from "fs"
 import path from "path"
 import bcrypt from "bcryptjs"
 import { verifySession, signSession, SESSION_COOKIE_NAME, SESSION_MAX_AGE } from "@/lib/session"
-import { findUserByEmail } from "@/lib/user-store"
+import { findUserByEmail, findUserById } from "@/lib/user-store"
 
 /**
  * Si l'erreur provient de requireAuth/requireAdmin, renvoie la réponse HTTP
@@ -54,10 +54,9 @@ export async function getCurrentUser(): Promise<User | null> {
       return null
     }
 
-    // Verify user still exists in database
-    const users = await readUsers()
-    const user = users.find(u => u.id === userData.id)
-    
+    // Verify user still exists (PostgreSQL puis repli JSON via findUserById)
+    const user = await findUserById(userData.id)
+
     if (!user) {
       // User was deleted, clear session
       await clearSession()

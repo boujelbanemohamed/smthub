@@ -85,6 +85,18 @@ async function writeLogs(logs: LogEntry[]): Promise<void> {
   await fs.writeFile(LOGS_FILE, JSON.stringify(logs, null, 2))
 }
 
+// Sérialisation des écritures du journal (mode fichier JSON) : sans cela, deux
+// appels concurrents lisent le même hash précédent et l'un écrase l'autre, ce
+// qui romprait la chaîne d'intégrité ou perdrait des entrées. On enchaîne donc
+// les sections critiques via une promesse-mutex en mémoire (par instance).
+let logWriteLock: Promise<void> = Promise.resolve()
+function withLogLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = logWriteLock.then(fn, fn)
+  // On garde la chaîne vivante même si `fn` échoue (sans propager l'erreur au verrou).
+  logWriteLock = run.then(() => {}, () => {})
+  return run
+}
+
 // Fonction principale pour logger une action
 export async function logAction(
   action: string,
@@ -111,31 +123,35 @@ export async function logAction(
         }
       })
     } else {
-      const logs = await readLogs()
-      const logEntry: LogEntry = {
-        id: generateLogId(),
-        timestamp: new Date().toISOString(),
-        level,
-        action,
-        userId,
-        userName,
-        details,
-        ip,
-        userAgent,
-        duration,
-        status,
-        errorMessage,
-        metadata
-      }
-      // Chaînage : le hash de cette entrée dépend du hash de la précédente.
-      const prevHash = logs.length ? logs[logs.length - 1].hash || "" : ""
-      logEntry.prevHash = prevHash
-      logEntry.hash = computeHash(prevHash, logEntry)
-      logs.push(logEntry)
-      if (logs.length > 1000) {
-        logs.splice(0, logs.length - 1000)
-      }
-      await writeLogs(logs)
+      // Section critique sérialisée : lecture → chaînage → écriture atomique
+      // vis-à-vis des autres appels de log de la même instance.
+      await withLogLock(async () => {
+        const logs = await readLogs()
+        const logEntry: LogEntry = {
+          id: generateLogId(),
+          timestamp: new Date().toISOString(),
+          level,
+          action,
+          userId,
+          userName,
+          details,
+          ip,
+          userAgent,
+          duration,
+          status,
+          errorMessage,
+          metadata
+        }
+        // Chaînage : le hash de cette entrée dépend du hash de la précédente.
+        const prevHash = logs.length ? logs[logs.length - 1].hash || "" : ""
+        logEntry.prevHash = prevHash
+        logEntry.hash = computeHash(prevHash, logEntry)
+        logs.push(logEntry)
+        if (logs.length > 1000) {
+          logs.splice(0, logs.length - 1000)
+        }
+        await writeLogs(logs)
+      })
     }
     
     // Log dans la console pour le développement
