@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma"
 import { logUserAction, logError } from "@/lib/logger"
 import { signSession, SESSION_COOKIE_NAME, SESSION_MAX_AGE } from "@/lib/session"
 import { touchLastLogin } from "@/lib/presence-store"
-import { verifyPending } from "@/lib/twofa-token"
+import { verifyPending, consumePending } from "@/lib/twofa-token"
 import {
   getSecret,
   confirmTotp,
@@ -80,6 +80,9 @@ export async function POST(request: NextRequest) {
     if (p.method === "totp" && p.stage === "enroll_totp" && !usedBackup) {
       backupCodes = await generateBackupCodes(p.uid)
     }
+
+    // Anti-rejeu : le jeton temporaire ne pourra plus être réutilisé.
+    consumePending(p.jti)
 
     // Ouverture de la session.
     const sessionData = { id: user.id, nom: user.nom, email: user.email, role: user.role }

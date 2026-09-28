@@ -52,8 +52,17 @@ function detectFileType(buffer: Buffer): { mime: string; extension: string } | n
 }
 
 function containsScript(buffer: Buffer): boolean {
-  const text = buffer.toString("utf-8").toLowerCase()
-  return text.includes("<script") || text.includes("onload=") || text.includes("javascript:")
+  // On retire les espaces autour des `=` pour éviter les contournements du type
+  // `onload = ...`. Denylist élargie aux principaux vecteurs XSS des SVG.
+  const text = buffer.toString("utf-8").toLowerCase().replace(/\s*=\s*/g, "=")
+  return (
+    text.includes("<script") ||
+    text.includes("<foreignobject") ||
+    text.includes("javascript:") ||
+    text.includes("data:text/html") ||
+    // Gestionnaires d'événements inline : on...=  (onload, onerror, onclick, onmouseover, …)
+    /\son[a-z]+=/.test(text)
+  )
 }
 
 async function ensureUploadDir() {
