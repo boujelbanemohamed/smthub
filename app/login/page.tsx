@@ -80,23 +80,18 @@ export default function LoginPage() {
         <ThemeToggle />
       </div>
       <div className="w-full max-w-md">
-        {/* Logo Section */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center bg-white rounded-2xl px-6 py-4 mb-6 shadow-md">
+        {/* Login Card — logo intégré directement en haut de la carte */}
+        <div className="bg-surface rounded-lg border border-line shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)] p-8">
+          <div className="flex justify-center pb-5 mb-6 border-b border-line">
             <Image
               src="/monetique-logo.png"
               alt="Monétique Tunisie"
               width={280}
               height={123}
               priority
-              className="h-auto w-[240px]"
+              className="h-auto w-[220px]"
             />
           </div>
-          <p className="text-ink-muted text-lg">Connectez-vous pour continuer</p>
-        </div>
-
-        {/* Login Card */}
-        <div className="bg-surface rounded-lg border border-line shadow-[0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)] p-8">
           {challenge ? (
             <TwoFactorStep
               challenge={challenge}
